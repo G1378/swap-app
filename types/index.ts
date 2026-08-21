@@ -89,3 +89,33 @@ export interface AppNotification {
   isRead: boolean;
   createdAt: string;
 }
+
+// --- Appended for profile redesign ---------------------------------------
+
+/** A Rating joined with the profile of whoever left it, for review lists. */
+export interface RatingWithAuthor extends Rating {
+  author: Profile | null;
+}
+
+/** Star-count breakdown (5→1) backing the reviews tab's histogram. */
+export interface RatingBreakdown {
+  counts: Record<1 | 2 | 3 | 4 | 5, number>;
+  total: number;
+}
+
+/** Computed (not stored) achievement shown as a pill on the profile header. */
+export interface ProfileBadge {
+  id: string;
+  label: string;
+  description: string;
+  icon: "trophy" | "star" | "flame" | "sparkles";
+}
+
+/** A wishlist_items row joined with the listing it points to. */
+export interface WishlistEntry {
+  id: string;
+  profileId: string;
+  listingId: string;
+  createdAt: string;
+  listing: Listing | null;
+}
