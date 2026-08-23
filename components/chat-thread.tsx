@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Loader2, Send } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { listMessages, sendMessage, subscribeToMessages } from "@/lib/messages";
+import { listMessages, markConversationRead, sendMessage, subscribeToMessages } from "@/lib/messages";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -32,11 +32,17 @@ export function ChatThread({ conversationId, currentUserId, otherUserName }: Cha
       if (!cancelled) {
         setMessages(initial);
         setLoading(false);
+        // Opening the thread reads everything that's here so far.
+        markConversationRead(supabase, conversationId, currentUserId);
       }
     });
 
     const channel = subscribeToMessages(supabase, conversationId, (message) => {
       setMessages((prev) => (prev.some((m) => m.id === message.id) ? prev : [...prev, message]));
+      // The thread is open and visible, so a newly arrived message counts as read too.
+      if (message.senderId !== currentUserId) {
+        markConversationRead(supabase, conversationId, currentUserId);
+      }
     });
 
     return () => {

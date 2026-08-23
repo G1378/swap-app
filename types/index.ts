@@ -8,6 +8,7 @@ export interface Profile {
   bio: string | null;
   location: string | null;
   createdAt: string;
+  onboardingCompleted: boolean;
 }
 
 export interface Listing {
@@ -86,6 +87,8 @@ export interface AppNotification {
   type: NotificationType;
   title: string;
   body: string | null;
+  /** Optional in-app path to navigate to when the notification is clicked. */
+  link: string | null;
   isRead: boolean;
   createdAt: string;
 }

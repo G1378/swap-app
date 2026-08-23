@@ -71,6 +71,9 @@ export function EditProfileDialog({ profile, userId, fallbackUsername }: EditPro
         bio: bio.trim() || null,
         location: location.trim() || null,
         avatar_url: avatarUrl,
+        // Saving from here means they've provided real info, so this also
+        // counts as having completed onboarding if they hadn't already.
+        onboarding_completed: true,
       };
 
       // Upsert rather than update: a profiles row is created by the

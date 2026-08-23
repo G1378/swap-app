@@ -19,9 +19,12 @@ const TABS: { id: Tab; label: string }[] = [
 export function SwapsList({
   swapRequests,
   currentUserId,
+  unreadCounts,
 }: {
   swapRequests: SwapRequestWithDetails[];
   currentUserId: string;
+  /** Unread message count keyed by conversation id. */
+  unreadCounts: Record<string, number>;
 }) {
   const [tab, setTab] = useState<Tab>("action");
 
@@ -66,6 +69,7 @@ export function SwapsList({
             const otherProfile = isSender ? sr.receiver : sr.sender;
             const theirItem = sr.listing;
             const yourItem = sr.offeredListing;
+            const unread = sr.conversationId ? unreadCounts[sr.conversationId] ?? 0 : 0;
 
             return (
               <li key={sr.id}>
@@ -87,6 +91,11 @@ export function SwapsList({
                     </p>
                   </div>
 
+                  {unread > 0 && (
+                    <Badge variant="accent" className="shrink-0">
+                      {unread} new
+                    </Badge>
+                  )}
                   <SwapStatusBadge status={sr.status} />
                 </Link>
               </li>

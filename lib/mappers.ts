@@ -42,6 +42,7 @@ export function mapProfileRow(row: Row): Profile {
     bio: row.bio ?? null,
     location: row.location ?? null,
     createdAt: row.created_at,
+    onboardingCompleted: row.onboarding_completed ?? false,
   };
 }
 
@@ -98,6 +99,7 @@ export function mapNotificationRow(row: Row): AppNotification {
     type: row.type,
     title: row.title,
     body: row.body ?? null,
+    link: row.link ?? null,
     isRead: row.is_read,
     createdAt: row.created_at,
   };

@@ -4,28 +4,55 @@ import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ListingCard } from "@/components/listing-card";
-import type { Listing } from "@/types";
+import { Button } from "@/components/ui/button";
+import { ListingCardWithOwner } from "@/components/listing-card-with-owner";
+import type { Listing, Profile } from "@/types";
 
-export function DiscoverGrid({ listings }: { listings: Listing[] }) {
+type SortOrder = "newest" | "oldest";
+
+interface DiscoverGridProps {
+  listings: Listing[];
+  /** Owner profile (username + name only) keyed by listing.ownerId, for the
+   * byline shown on each card. Missing entries just render no byline. */
+  owners: Record<string, Pick<Profile, "username" | "fullName">>;
+}
+
+export function DiscoverGrid({ listings, owners }: DiscoverGridProps) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string | null>(null);
+  const [condition, setCondition] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
 
-  const categories = useMemo(
-    () => Array.from(new Set(listings.map((l) => l.category))),
-    [listings]
-  );
+  const categories = useMemo(() => Array.from(new Set(listings.map((l) => l.category))).sort(), [listings]);
+  const conditions = useMemo(() => Array.from(new Set(listings.map((l) => l.condition))).sort(), [listings]);
 
   const filtered = useMemo(() => {
-    return listings.filter((listing) => {
+    const result = listings.filter((listing) => {
+      const q = query.toLowerCase();
       const matchesQuery =
-        !query ||
-        listing.title.toLowerCase().includes(query.toLowerCase()) ||
-        listing.description.toLowerCase().includes(query.toLowerCase());
+        !q ||
+        listing.title.toLowerCase().includes(q) ||
+        listing.description.toLowerCase().includes(q) ||
+        (listing.wantedInReturn?.toLowerCase().includes(q) ?? false);
       const matchesCategory = !category || listing.category === category;
-      return matchesQuery && matchesCategory;
+      const matchesCondition = !condition || listing.condition === condition;
+      return matchesQuery && matchesCategory && matchesCondition;
     });
-  }, [listings, query, category]);
+
+    return [...result].sort((a, b) => {
+      const diff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return sortOrder === "newest" ? -diff : diff;
+    });
+  }, [listings, query, category, condition, sortOrder]);
+
+  const hasActiveFilters = Boolean(query || category || condition || sortOrder !== "newest");
+
+  function clearFilters() {
+    setQuery("");
+    setCategory(null);
+    setCondition(null);
+    setSortOrder("newest");
+  }
 
   return (
     <div>
@@ -41,7 +68,8 @@ export function DiscoverGrid({ listings }: { listings: Listing[] }) {
         </div>
 
         {categories.length > 0 && (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Category</span>
             <button onClick={() => setCategory(null)}>
               <Badge variant={category === null ? "default" : "outline"}>All</Badge>
             </button>
@@ -52,6 +80,42 @@ export function DiscoverGrid({ listings }: { listings: Listing[] }) {
             ))}
           </div>
         )}
+
+        {conditions.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Condition</span>
+            <button onClick={() => setCondition(null)}>
+              <Badge variant={condition === null ? "default" : "outline"}>Any</Badge>
+            </button>
+            {conditions.map((c) => (
+              <button key={c} onClick={() => setCondition(c)}>
+                <Badge variant={condition === c ? "default" : "outline"}>{c}</Badge>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Sort</span>
+            <button onClick={() => setSortOrder("newest")}>
+              <Badge variant={sortOrder === "newest" ? "default" : "outline"}>Newest</Badge>
+            </button>
+            <button onClick={() => setSortOrder("oldest")}>
+              <Badge variant={sortOrder === "oldest" ? "default" : "outline"}>Oldest</Badge>
+            </button>
+          </div>
+
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          {filtered.length} item{filtered.length === 1 ? "" : "s"}
+        </p>
       </div>
 
       {filtered.length === 0 ? (
@@ -62,7 +126,7 @@ export function DiscoverGrid({ listings }: { listings: Listing[] }) {
       ) : (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((listing) => (
-            <ListingCard key={listing.id} listing={listing} />
+            <ListingCardWithOwner key={listing.id} listing={listing} owner={owners[listing.ownerId] ?? null} />
           ))}
         </div>
       )}

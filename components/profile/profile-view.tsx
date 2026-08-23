@@ -55,6 +55,7 @@ export async function ProfileView({ profileId, fallbackUsername, viewerId }: Pro
     bio: null,
     location: null,
     createdAt: new Date().toISOString(),
+    onboardingCompleted: false,
   };
 
   return (

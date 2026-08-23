@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
+import { mapProfileRow } from "@/lib/mappers";
 import { DiscoverGrid } from "@/components/discover-grid";
-import type { Listing } from "@/types";
+import type { Listing, Profile } from "@/types";
 
 // Shown when the `listings` table is empty or not yet created, so the
 // page still demonstrates the intended UI during early development.
@@ -94,8 +95,29 @@ async function getListings(): Promise<Listing[]> {
   }));
 }
 
+/** Owner username + name for each listing's byline, keyed by ownerId.
+ * Mock listings ("mock" ownerId) simply won't have an entry — the card
+ * renders with no byline in that case. */
+async function getOwnersByListingOwnerId(
+  listings: Listing[]
+): Promise<Record<string, Pick<Profile, "username" | "fullName">>> {
+  const ownerIds = Array.from(new Set(listings.map((l) => l.ownerId))).filter((id) => id !== "mock");
+  if (ownerIds.length === 0) return {};
+
+  const supabase = createClient();
+  const { data } = await supabase.from("profiles").select("*").in("id", ownerIds);
+
+  const result: Record<string, Pick<Profile, "username" | "fullName">> = {};
+  for (const row of data ?? []) {
+    const profile = mapProfileRow(row);
+    result[profile.id] = { username: profile.username, fullName: profile.fullName };
+  }
+  return result;
+}
+
 export default async function DiscoverPage() {
   const listings = await getListings();
+  const owners = await getOwnersByListingOwnerId(listings);
 
   return (
     <div className="container py-10">
@@ -105,7 +127,7 @@ export default async function DiscoverPage() {
           Browse items available to swap right now.
         </p>
       </div>
-      <DiscoverGrid listings={listings} />
+      <DiscoverGrid listings={listings} owners={owners} />
     </div>
   );
 }

@@ -1,19 +1,8 @@
 import Link from "next/link";
 import { Star } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import { cn, timeAgo } from "@/lib/utils";
 import type { RatingWithAuthor } from "@/types";
-
-function timeAgo(iso: string): string {
-  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
-  if (days < 1) return "today";
-  if (days === 1) return "1 day ago";
-  if (days < 30) return `${days} days ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
-  const years = Math.floor(months / 12);
-  return `${years} year${years === 1 ? "" : "s"} ago`;
-}
 
 export function ReviewCard({ rating }: { rating: RatingWithAuthor }) {
   const authorName = rating.author?.fullName || rating.author?.username || "A swapper";

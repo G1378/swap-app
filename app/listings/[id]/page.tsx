@@ -92,7 +92,10 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
 
           {/* Owner */}
           {owner && (
-            <div className="flex items-center gap-3 rounded-lg border border-border p-3">
+            <Link
+              href={`/profile/${owner.username}`}
+              className="flex items-center gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-accent/50"
+            >
               <Avatar alt={owner.fullName || owner.username} fallback={owner.fullName || owner.username} src={owner.avatarUrl} size={44} />
               <div className="flex-1">
                 <p className="text-sm font-medium">{owner.fullName || owner.username}</p>
@@ -110,7 +113,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                   </span>
                 </div>
               </div>
-            </div>
+            </Link>
           )}
 
           {/* Swap action */}

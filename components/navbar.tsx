@@ -1,22 +1,28 @@
 import Link from "next/link";
 import { Repeat2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Avatar } from "@/components/ui/avatar";
 import { createClient } from "@/lib/supabase/server";
+import { getProfileById } from "@/lib/profiles";
+import { getUnreadNotificationCount } from "@/lib/notifications";
+import { NotificationBell } from "@/components/notification-bell";
+import { UserMenu } from "@/components/user-menu";
 
-/**
- * Server-rendered navbar. Checks the current Supabase session so it can
- * show "Log in / Sign up" or the user's avatar + profile link.
- */
 export async function Navbar() {
   const supabase = createClient();
-  const { data } = await supabase.auth.getUser();
-  const user = data.user;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const [profile, unreadCount] = user
+    ? await Promise.all([getProfileById(supabase, user.id), getUnreadNotificationCount(supabase, user.id)])
+    : [null, 0];
+
+  const displayName = profile?.fullName || profile?.username || user?.email || "You";
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur">
       <div className="container flex h-16 items-center justify-between">
-        <Link href="/" className="flex items-center gap-2 font-semibold text-lg">
+        <Link href="/" className="flex items-center gap-2 text-lg font-semibold">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Repeat2 className="h-4 w-4" />
           </span>
@@ -41,14 +47,10 @@ export async function Navbar() {
 
         <div className="flex items-center gap-3">
           {user ? (
-            <Link href="/profile">
-              <Avatar
-                alt={user.email ?? "You"}
-                fallback={user.email ?? "U"}
-                src={user.user_metadata?.avatar_url ?? null}
-                size={36}
-              />
-            </Link>
+            <>
+              <NotificationBell profileId={user.id} initialUnreadCount={unreadCount} />
+              <UserMenu displayName={displayName} avatarUrl={profile?.avatarUrl ?? null} />
+            </>
           ) : (
             <>
               <Link href="/login">

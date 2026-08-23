@@ -41,13 +41,22 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
 
   const myRating = swapRequest.status === "completed" ? await getMyRatingForSwap(supabase, swapRequest.id, user.id) : null;
 
+  const otherDisplayName = otherProfile?.fullName || otherProfile?.username || "another swapper";
+
   return (
     <div className="container max-w-3xl py-10">
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Swap request</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            With {otherProfile?.fullName || otherProfile?.username || "another swapper"}
+            With{" "}
+            {otherProfile ? (
+              <Link href={`/profile/${otherProfile.username}`} className="font-medium text-foreground hover:underline">
+                {otherDisplayName}
+              </Link>
+            ) : (
+              otherDisplayName
+            )}
           </p>
         </div>
         <SwapStatusBadge status={swapRequest.status} />
@@ -85,7 +94,7 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
             conversationId={swapRequest.conversationId}
             currentUserId={user.id}
             otherUserId={otherUserId}
-            otherUserName={otherProfile?.fullName || otherProfile?.username || "them"}
+            otherUserName={otherDisplayName}
           />
         </div>
       )}
