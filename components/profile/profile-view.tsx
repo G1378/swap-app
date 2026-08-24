@@ -4,9 +4,11 @@ import { getProfileById, getProfileListings, getCompletedSwapCount } from "@/lib
 import { getProfileRatingSummary, getRatingBreakdown, listRatingsForProfile } from "@/lib/ratings";
 import { getWishlist, getWishlistedListingIds } from "@/lib/wishlist";
 import { computeBadges } from "@/lib/badges";
+import { isBlocked } from "@/lib/blocks";
 import { ProfileHeader } from "@/components/profile/profile-header";
 import { ProfileTabsSection } from "@/components/profile/profile-tabs-section";
 import { EditProfileDialog } from "@/components/profile/edit-profile-dialog";
+import { ProfileActionsMenu } from "@/components/profile/profile-actions-menu";
 import type { Profile } from "@/types";
 
 interface ProfileViewProps {
@@ -24,14 +26,16 @@ export async function ProfileView({ profileId, fallbackUsername, viewerId }: Pro
   const supabase = createClient();
   const isOwnProfile = viewerId === profileId;
 
-  const [profile, listings, ratingSummary, ratingBreakdown, reviews, completedSwaps] = await Promise.all([
-    getProfileById(supabase, profileId),
-    getProfileListings(supabase, profileId),
-    getProfileRatingSummary(supabase, profileId),
-    getRatingBreakdown(supabase, profileId),
-    listRatingsForProfile(supabase, profileId),
-    getCompletedSwapCount(supabase, profileId),
-  ]);
+  const [profile, listings, ratingSummary, ratingBreakdown, reviews, completedSwaps, initialIsBlocked] =
+    await Promise.all([
+      getProfileById(supabase, profileId),
+      getProfileListings(supabase, profileId),
+      getProfileRatingSummary(supabase, profileId),
+      getRatingBreakdown(supabase, profileId),
+      listRatingsForProfile(supabase, profileId),
+      getCompletedSwapCount(supabase, profileId),
+      viewerId && !isOwnProfile ? isBlocked(supabase, viewerId, profileId) : Promise.resolve(false),
+    ]);
 
   if (!profile && !isOwnProfile) {
     notFound();
@@ -72,6 +76,13 @@ export async function ProfileView({ profileId, fallbackUsername, viewerId }: Pro
         action={
           isOwnProfile ? (
             <EditProfileDialog profile={profile} userId={profileId} fallbackUsername={fallbackUsername} />
+          ) : viewerId ? (
+            <ProfileActionsMenu
+              viewerId={viewerId}
+              profileId={profileId}
+              profileUsername={username}
+              initialIsBlocked={initialIsBlocked}
+            />
           ) : undefined
         }
       />

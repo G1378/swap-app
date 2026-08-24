@@ -24,6 +24,15 @@ export interface Listing {
   createdAt: string;
 }
 
+/** Additional gallery photos beyond a listing's cover (Listing.imageUrl). */
+export interface ListingPhoto {
+  id: string;
+  listingId: string;
+  url: string;
+  position: number;
+  createdAt: string;
+}
+
 /** Mirrors the `swap_requests.status` check constraint + state machine. */
 export type SwapRequestStatus = "pending" | "accepted" | "declined" | "cancelled" | "completed";
 
@@ -92,6 +101,9 @@ export interface AppNotification {
   isRead: boolean;
   createdAt: string;
 }
+
+/** Mirrors the `reports.reason` check constraint. */
+export type ReportReason = "spam" | "scam_or_fraud" | "inappropriate_content" | "harassment" | "other";
 
 // --- Appended for profile redesign ---------------------------------------
 

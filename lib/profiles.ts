@@ -60,3 +60,14 @@ export async function getCompletedSwapCount(
 
   return count ?? 0;
 }
+
+/** All profiles for the Members directory, most recently joined first. */
+export async function listProfiles(supabase: SupabaseClient, limit = 200): Promise<Profile[]> {
+  const { data } = await supabase
+    .from("profiles")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  return (data ?? []).map(mapProfileRow);
+}

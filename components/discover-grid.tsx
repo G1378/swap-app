@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,18 +13,19 @@ type SortOrder = "newest" | "oldest";
 
 interface DiscoverGridProps {
   listings: Listing[];
-  /** Owner profile (username + name only) keyed by listing.ownerId, for the
-   * byline shown on each card. Missing entries just render no byline. */
   owners: Record<string, Pick<Profile, "username" | "fullName">>;
+  /** Full category list (not just categories present in `listings`), so
+   * every category stays browsable even when the current view has none. */
+  categories: string[];
+  /** null = the "All categories" view at /discover. */
+  activeCategory: string | null;
 }
 
-export function DiscoverGrid({ listings, owners }: DiscoverGridProps) {
+export function DiscoverGrid({ listings, owners, categories, activeCategory }: DiscoverGridProps) {
   const [query, setQuery] = useState("");
-  const [category, setCategory] = useState<string | null>(null);
   const [condition, setCondition] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
 
-  const categories = useMemo(() => Array.from(new Set(listings.map((l) => l.category))).sort(), [listings]);
   const conditions = useMemo(() => Array.from(new Set(listings.map((l) => l.condition))).sort(), [listings]);
 
   const filtered = useMemo(() => {
@@ -34,22 +36,20 @@ export function DiscoverGrid({ listings, owners }: DiscoverGridProps) {
         listing.title.toLowerCase().includes(q) ||
         listing.description.toLowerCase().includes(q) ||
         (listing.wantedInReturn?.toLowerCase().includes(q) ?? false);
-      const matchesCategory = !category || listing.category === category;
       const matchesCondition = !condition || listing.condition === condition;
-      return matchesQuery && matchesCategory && matchesCondition;
+      return matchesQuery && matchesCondition;
     });
 
     return [...result].sort((a, b) => {
       const diff = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
       return sortOrder === "newest" ? -diff : diff;
     });
-  }, [listings, query, category, condition, sortOrder]);
+  }, [listings, query, condition, sortOrder]);
 
-  const hasActiveFilters = Boolean(query || category || condition || sortOrder !== "newest");
+  const hasActiveFilters = Boolean(query || condition || sortOrder !== "newest");
 
   function clearFilters() {
     setQuery("");
-    setCategory(null);
     setCondition(null);
     setSortOrder("newest");
   }
@@ -67,19 +67,17 @@ export function DiscoverGrid({ listings, owners }: DiscoverGridProps) {
           />
         </div>
 
-        {categories.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Category</span>
-            <button onClick={() => setCategory(null)}>
-              <Badge variant={category === null ? "default" : "outline"}>All</Badge>
-            </button>
-            {categories.map((c) => (
-              <button key={c} onClick={() => setCategory(c)}>
-                <Badge variant={category === c ? "default" : "outline"}>{c}</Badge>
-              </button>
-            ))}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Category</span>
+          <Link href="/discover">
+            <Badge variant={activeCategory === null ? "default" : "outline"}>All</Badge>
+          </Link>
+          {categories.map((c) => (
+            <Link key={c} href={`/discover/${encodeURIComponent(c)}`}>
+              <Badge variant={activeCategory?.toLowerCase() === c.toLowerCase() ? "default" : "outline"}>{c}</Badge>
+            </Link>
+          ))}
+        </div>
 
         {conditions.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">

@@ -33,6 +33,9 @@ export async function Navbar() {
           <Link href="/discover" className="text-muted-foreground hover:text-foreground">
             Discover
           </Link>
+          <Link href="/members" className="text-muted-foreground hover:text-foreground">
+            Members
+          </Link>
           {user && (
             <>
               <Link href="/swaps" className="text-muted-foreground hover:text-foreground">

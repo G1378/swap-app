@@ -5,23 +5,15 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { getPhotosForListing } from "@/lib/listing-photos";
+import { deleteListingImages } from "@/lib/storage";
+import { LISTING_CATEGORIES, LISTING_CONDITIONS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import type { Listing } from "@/types";
-
-const CATEGORIES = [
-  "Gaming",
-  "LEGO",
-  "Camera Equipment",
-  "Musical Instruments",
-  "PC Components",
-  "Other",
-];
-
-const CONDITIONS = ["New", "Like new", "Excellent", "Good", "Fair"];
 
 interface ListingFormProps {
   mode: "create" | "edit";
@@ -35,8 +27,8 @@ export function ListingForm({ mode, userId, listing }: ListingFormProps) {
 
   const [title, setTitle] = useState(listing?.title ?? "");
   const [description, setDescription] = useState(listing?.description ?? "");
-  const [category, setCategory] = useState(listing?.category ?? CATEGORIES[0]);
-  const [condition, setCondition] = useState(listing?.condition ?? CONDITIONS[0]);
+  const [category, setCategory] = useState(listing?.category ?? LISTING_CATEGORIES[0]);
+  const [condition, setCondition] = useState(listing?.condition ?? LISTING_CONDITIONS[0]);
   const [wantedInReturn, setWantedInReturn] = useState(listing?.wantedInReturn ?? "");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(listing?.imageUrl ?? null);
@@ -114,23 +106,33 @@ export function ListingForm({ mode, userId, listing }: ListingFormProps) {
     if (!confirm("Delete this listing? This can't be undone.")) return;
 
     setDeleting(true);
-    const { error: deleteError } = await supabase.from("listings").delete().eq("id", listing.id);
-    setDeleting(false);
+    setError(null);
 
-    if (deleteError) {
-      setError(deleteError.message);
-      return;
+    try {
+      // Gather gallery photo URLs before the row (and its listing_photos
+      // rows, via cascade) disappear, so storage cleanup has something to
+      // work from.
+      const galleryPhotos = await getPhotosForListing(supabase, listing.id);
+
+      const { error: deleteError } = await supabase.from("listings").delete().eq("id", listing.id);
+      if (deleteError) throw new Error(deleteError.message);
+
+      await deleteListingImages(supabase, [listing.imageUrl, ...galleryPhotos.map((p) => p.url)]);
+
+      router.push("/profile");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete listing.");
+    } finally {
+      setDeleting(false);
     }
-
-    router.push("/profile");
-    router.refresh();
   }
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-6">
       {/* Image */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="image">Photo</Label>
+        <Label htmlFor="image">Cover photo</Label>
         <label
           htmlFor="image"
           className="relative flex aspect-[4/3] w-full max-w-sm cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-xl border border-dashed border-border bg-muted text-muted-foreground hover:bg-muted/70"
@@ -151,6 +153,9 @@ export function ListingForm({ mode, userId, listing }: ListingFormProps) {
           className="sr-only"
           onChange={handleImageChange}
         />
+        {mode === "create" && (
+          <p className="text-xs text-muted-foreground">You can add more photos after creating the listing.</p>
+        )}
       </div>
 
       {/* Title */}
@@ -184,7 +189,7 @@ export function ListingForm({ mode, userId, listing }: ListingFormProps) {
         <div className="flex flex-col gap-2">
           <Label htmlFor="category">Category</Label>
           <Select id="category" value={category} onChange={(e) => setCategory(e.target.value)}>
-            {CATEGORIES.map((c) => (
+            {LISTING_CATEGORIES.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -194,7 +199,7 @@ export function ListingForm({ mode, userId, listing }: ListingFormProps) {
         <div className="flex flex-col gap-2">
           <Label htmlFor="condition">Condition</Label>
           <Select id="condition" value={condition} onChange={(e) => setCondition(e.target.value)}>
-            {CONDITIONS.map((c) => (
+            {LISTING_CONDITIONS.map((c) => (
               <option key={c} value={c}>
                 {c}
               </option>
@@ -227,18 +232,25 @@ export function ListingForm({ mode, userId, listing }: ListingFormProps) {
           </Button>
         </div>
 
-        {mode === "edit" && (
-          <Button
-            type="button"
-            variant="destructive"
-            className="gap-2"
-            disabled={deleting}
-            onClick={handleDelete}
-          >
-            <Trash2 className="h-4 w-4" />
-            {deleting ? "Deleting..." : "Delete"}
-          </Button>
-        )}
+        {mode === "edit" &&
+          listing &&
+          (listing.status === "available" ? (
+            <Button
+              type="button"
+              variant="destructive"
+              className="gap-2"
+              disabled={deleting}
+              onClick={handleDelete}
+            >
+              <Trash2 className="h-4 w-4" />
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          ) : (
+            <p className="max-w-[14rem] text-right text-xs text-muted-foreground">
+              Can&apos;t delete while this listing is{" "}
+              {listing.status === "pending" ? "part of a pending swap" : "marked as swapped"}.
+            </p>
+          ))}
       </div>
     </form>
   );

@@ -2,6 +2,7 @@ import type {
   AppNotification,
   Conversation,
   Listing,
+  ListingPhoto,
   Message,
   Profile,
   Rating,
@@ -29,6 +30,16 @@ export function mapListingRow(row: Row): Listing {
     imageUrl: row.image_url ?? null,
     wantedInReturn: row.wanted_in_return ?? null,
     status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
+export function mapListingPhotoRow(row: Row): ListingPhoto {
+  return {
+    id: row.id,
+    listingId: row.listing_id,
+    url: row.url,
+    position: row.position,
     createdAt: row.created_at,
   };
 }
