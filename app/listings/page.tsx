@@ -1,16 +1,14 @@
+import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MapPin, Star } from "lucide-react";
+import { MapPin, Package, Star } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { mapListingRow, mapProfileRow } from "@/lib/mappers";
 import { findActiveSwapRequest } from "@/lib/swap-requests";
 import { getProfileRatingSummary } from "@/lib/ratings";
-import { getPhotosForListing } from "@/lib/listing-photos";
-import { isBlocked } from "@/lib/blocks";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ListingSwapAction } from "@/components/listing-swap-action";
-import { ListingPhotoViewer } from "@/components/listing-photo-viewer";
 import type { Listing } from "@/types";
 
 interface ListingDetailPageProps {
@@ -28,12 +26,11 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
 
   const listing = mapListingRow(listingRow);
 
-  const [{ data: ownerRow }, ratingSummary, photos, {
+  const [{ data: ownerRow }, ratingSummary, {
     data: { user },
   }] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", listing.ownerId).maybeSingle(),
     getProfileRatingSummary(supabase, listing.ownerId),
-    getPhotosForListing(supabase, listing.id),
     supabase.auth.getUser(),
   ]);
 
@@ -42,10 +39,9 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
 
   let myListings: Listing[] = [];
   let activeSwapRequestId: string | null = null;
-  let isBlockedFromOwner = false;
 
   if (user && !isOwner) {
-    const [{ data: myListingRows }, activeRequest, blocked] = await Promise.all([
+    const [{ data: myListingRows }, activeRequest] = await Promise.all([
       supabase
         .from("listings")
         .select("*")
@@ -53,19 +49,25 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
         .eq("status", "available")
         .order("created_at", { ascending: false }),
       findActiveSwapRequest(supabase, listing.id, user.id),
-      isBlocked(supabase, user.id, listing.ownerId),
     ]);
 
     myListings = (myListingRows ?? []).map(mapListingRow);
     activeSwapRequestId = activeRequest?.id ?? null;
-    isBlockedFromOwner = blocked;
   }
 
   return (
     <div className="container max-w-4xl py-10">
       <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
-        {/* Photos */}
-        <ListingPhotoViewer title={listing.title} coverUrl={listing.imageUrl} photos={photos} />
+        {/* Photo */}
+        <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl border border-border bg-muted">
+          {listing.imageUrl ? (
+            <Image src={listing.imageUrl} alt={listing.title} fill className="object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+              <Package className="h-12 w-12" />
+            </div>
+          )}
+        </div>
 
         {/* Details */}
         <div className="flex flex-col gap-4">
@@ -118,8 +120,6 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
           <div className="mt-2">
             {isOwner ? (
               <p className="text-sm text-muted-foreground">This is your listing.</p>
-            ) : isBlockedFromOwner ? (
-              <p className="text-sm text-muted-foreground">This listing isn&apos;t available to you.</p>
             ) : activeSwapRequestId ? (
               <Link href={`/swaps/${activeSwapRequestId}`}>
                 <Badge variant="accent" className="cursor-pointer px-3 py-1.5 text-sm">
