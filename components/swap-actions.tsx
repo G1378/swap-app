@@ -1,24 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, X } from "lucide-react";
+import { Check, Loader2, MessageSquareDiff, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cancelSwapRequest, markSwapSideComplete, respondToSwapRequest } from "@/lib/swap-requests";
 import { Button } from "@/components/ui/button";
-import type { SwapRequestWithDetails } from "@/types";
+import { CounterOfferDialog } from "@/components/counter-offer-dialog";
+import type { Listing, SwapRequestWithDetails } from "@/types";
 
 interface SwapActionsProps {
   swapRequest: SwapRequestWithDetails;
   role: "sender" | "receiver";
   currentUserId: string;
+  /** The current viewer's own available listings, needed if they want to
+   * counter (they pick from their own items, same as the original offer). */
+  myListings: Listing[];
 }
 
-export function SwapActions({ swapRequest, role, currentUserId }: SwapActionsProps) {
+export function SwapActions({ swapRequest, role, currentUserId, myListings }: SwapActionsProps) {
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [counterOpen, setCounterOpen] = useState(false);
 
   async function run(action: string, fn: () => Promise<void>) {
     setLoading(action);
@@ -36,6 +42,25 @@ export function SwapActions({ swapRequest, role, currentUserId }: SwapActionsPro
   const myCompletedAt = role === "sender" ? swapRequest.senderCompletedAt : swapRequest.receiverCompletedAt;
   const otherCompletedAt = role === "sender" ? swapRequest.receiverCompletedAt : swapRequest.senderCompletedAt;
 
+  if (swapRequest.status === "countered") {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-sm text-muted-foreground">
+          {role === "receiver"
+            ? "You proposed new terms for this swap."
+            : "They proposed new terms for this swap."}
+        </p>
+        {swapRequest.counteredByRequestId && (
+          <Link href={`/swaps/${swapRequest.counteredByRequestId}`}>
+            <Button size="sm" variant="outline" className="gap-2">
+              View the counter-offer
+            </Button>
+          </Link>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-3">
@@ -49,6 +74,17 @@ export function SwapActions({ swapRequest, role, currentUserId }: SwapActionsPro
               {loading === "accept" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
               Accept
             </Button>
+            {myListings.length > 0 && (
+              <Button
+                variant="outline"
+                className="gap-2"
+                disabled={loading !== null}
+                onClick={() => setCounterOpen(true)}
+              >
+                <MessageSquareDiff className="h-4 w-4" />
+                Counter offer
+              </Button>
+            )}
             <Button
               variant="outline"
               className="gap-2"
@@ -92,6 +128,16 @@ export function SwapActions({ swapRequest, role, currentUserId }: SwapActionsPro
       )}
 
       {error && <p className="text-sm text-destructive">{error}</p>}
+
+      {swapRequest.status === "pending" && role === "receiver" && (
+        <CounterOfferDialog
+          open={counterOpen}
+          onClose={() => setCounterOpen(false)}
+          parentRequest={swapRequest}
+          currentUserId={currentUserId}
+          myListings={myListings}
+        />
+      )}
     </div>
   );
 }

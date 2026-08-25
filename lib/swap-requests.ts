@@ -1,32 +1,36 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapListingRow, mapProfileRow, mapSwapRequestRow } from "@/lib/mappers";
-import type { Listing, Profile, SwapRequest, SwapRequestWithDetails } from "@/types";
+import type { Listing, SwapRequest, SwapRequestWithDetails } from "@/types";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Row = Record<string, any>;
 
 interface CreateSwapRequestInput {
   listingId: string;
   senderId: string;
   receiverId: string;
-  offeredListingId: string;
+  /** One or more of the sender's own listings, offered as a bundle. */
+  offeredListingIds: string[];
+  /** Optional cash added on top of the bundle, in cents. */
+  cashOfferCents?: number;
   note?: string;
 }
 
-/**
- * Creates a swap request. The `0003_swap_mechanics.sql` triggers handle the
- * rest automatically: a conversation + participants are created, and the
- * listing owner gets a notification. If a note was provided, it's sent as
- * the opening chat message once the conversation exists.
- */
 export async function createSwapRequest(
   supabase: SupabaseClient,
   input: CreateSwapRequestInput
 ): Promise<SwapRequest> {
+  if (input.offeredListingIds.length === 0) {
+    throw new Error("Choose at least one item to offer.");
+  }
+
   const { data, error } = await supabase
     .from("swap_requests")
     .insert({
       listing_id: input.listingId,
       sender_id: input.senderId,
       receiver_id: input.receiverId,
-      offered_listing_id: input.offeredListingId,
+      cash_offer_cents: input.cashOfferCents ?? 0,
     })
     .select("*")
     .single();
@@ -36,29 +40,119 @@ export async function createSwapRequest(
   }
 
   const swapRequest = mapSwapRequestRow(data);
+  await insertOfferedItems(supabase, swapRequest.id, input.offeredListingIds);
 
   if (input.note?.trim()) {
-    const conversation = await getConversationForSwapRequest(supabase, swapRequest.id);
-    if (conversation) {
-      const { error: messageError } = await supabase.from("messages").insert({
-        conversation_id: conversation.id,
-        sender_id: input.senderId,
-        body: input.note.trim(),
-      });
-      // A failed opening message shouldn't roll back a successfully created
-      // swap request - surface it, but don't throw.
-      if (messageError) {
-        console.error("Failed to send opening message:", messageError.message);
-      }
-    }
+    await sendOpeningMessage(supabase, swapRequest.id, input.senderId, input.note);
   }
 
   return swapRequest;
 }
 
-/** Returns the id of any pending/accepted request the given user already
- * has open on a listing, so the UI can link to it instead of showing a
- * "Request swap" button twice. */
+interface CreateCounterOfferInput {
+  parentRequestId: string;
+  listingId: string;
+  /** Whoever is countering becomes the new sender for this round. */
+  senderId: string;
+  receiverId: string;
+  offeredListingIds: string[];
+  cashOfferCents?: number;
+  note?: string;
+}
+
+/**
+ * Proposes new terms in reply to a pending request. Creates a fresh
+ * swap_requests row linked via parent_request_id, then marks the parent
+ * 'countered' so it stops being actionable. The chat thread carries over
+ * automatically (see the on_swap_request_created trigger in migration
+ * 0009) — this isn't a new conversation, just a new round of the same one.
+ *
+ * Note: this isn't wrapped in a single DB transaction (the Supabase client
+ * doesn't make that easy without a dedicated RPC function). If the items
+ * insert fails after the request row succeeds, you're left with a
+ * bundle-less counter row — a real but narrow edge case, consistent with
+ * how a failed opening message already doesn't roll back request creation
+ * elsewhere in this file.
+ */
+export async function createCounterOffer(
+  supabase: SupabaseClient,
+  input: CreateCounterOfferInput
+): Promise<SwapRequest> {
+  if (input.offeredListingIds.length === 0) {
+    throw new Error("Choose at least one item to offer.");
+  }
+
+  const { data, error } = await supabase
+    .from("swap_requests")
+    .insert({
+      listing_id: input.listingId,
+      sender_id: input.senderId,
+      receiver_id: input.receiverId,
+      cash_offer_cents: input.cashOfferCents ?? 0,
+      parent_request_id: input.parentRequestId,
+    })
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    throw new Error(error?.message ?? "Failed to submit counter-offer.");
+  }
+
+  const counterRequest = mapSwapRequestRow(data);
+  await insertOfferedItems(supabase, counterRequest.id, input.offeredListingIds);
+
+  const { error: supersedeError } = await supabase
+    .from("swap_requests")
+    .update({ status: "countered" })
+    .eq("id", input.parentRequestId);
+  if (supersedeError) throw new Error(supersedeError.message);
+
+  if (input.note?.trim()) {
+    await sendOpeningMessage(supabase, counterRequest.id, input.senderId, input.note);
+  }
+
+  return counterRequest;
+}
+
+async function insertOfferedItems(
+  supabase: SupabaseClient,
+  swapRequestId: string,
+  listingIds: string[]
+): Promise<void> {
+  const { error } = await supabase
+    .from("swap_request_items")
+    .insert(listingIds.map((listingId) => ({ swap_request_id: swapRequestId, listing_id: listingId })));
+  if (error) throw new Error(error.message);
+}
+
+async function sendOpeningMessage(
+  supabase: SupabaseClient,
+  swapRequestId: string,
+  senderId: string,
+  note: string
+): Promise<void> {
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id")
+    .eq("swap_request_id", swapRequestId)
+    .maybeSingle();
+
+  if (!conversation) return;
+
+  const { error } = await supabase
+    .from("messages")
+    .insert({ conversation_id: conversation.id, sender_id: senderId, body: note.trim() });
+
+  if (error) {
+    // A failed opening message shouldn't roll back an otherwise successful
+    // swap request — the person can always just send it as a follow-up.
+    console.error("Failed to send opening message:", error.message);
+  }
+}
+
+/** Returns any pending/accepted request the given user already has open on
+ * a listing, so the UI can link to it instead of showing "Request swap"
+ * again. */
 export async function findActiveSwapRequest(
   supabase: SupabaseClient,
   listingId: string,
@@ -102,59 +196,61 @@ export async function getSwapRequestById(
   return hydrated ?? null;
 }
 
-/** Batch-fetches the listings/profiles/conversation referenced by a set of
- * swap requests, avoiding one round trip per row. */
+/** Batch-fetches the listings/profiles/conversation/offered-bundle for a
+ * set of swap requests, avoiding a round trip per row. */
 async function hydrateSwapRequests(
   supabase: SupabaseClient,
   swapRequests: SwapRequest[]
 ): Promise<SwapRequestWithDetails[]> {
   if (swapRequests.length === 0) return [];
 
-  const listingIds = Array.from(
-    new Set(
-      swapRequests.flatMap((sr) => [sr.listingId, sr.offeredListingId].filter((id): id is string => !!id))
-    )
-  );
-  const profileIds = Array.from(new Set(swapRequests.flatMap((sr) => [sr.senderId, sr.receiverId])));
   const swapRequestIds = swapRequests.map((sr) => sr.id);
+  const profileIds = Array.from(new Set(swapRequests.flatMap((sr) => [sr.senderId, sr.receiverId])));
 
-  const [listingsRes, profilesRes, conversationsRes] = await Promise.all([
-    listingIds.length
-      ? supabase.from("listings").select("*").in("id", listingIds)
-      : Promise.resolve({ data: [] as Listing[] }),
-    profileIds.length
-      ? supabase.from("profiles").select("*").in("id", profileIds)
-      : Promise.resolve({ data: [] as Profile[] }),
+  const [itemsRes, profilesRes, conversationsRes, childrenRes] = await Promise.all([
+    supabase.from("swap_request_items").select("swap_request_id, listing_id").in("swap_request_id", swapRequestIds),
+    profileIds.length ? supabase.from("profiles").select("*").in("id", profileIds) : Promise.resolve({ data: [] }),
     supabase.from("conversations").select("id, swap_request_id").in("swap_request_id", swapRequestIds),
+    supabase.from("swap_requests").select("id, parent_request_id").in("parent_request_id", swapRequestIds),
   ]);
 
-  const listingsById = new Map(((listingsRes.data as Row[]) ?? []).map((r) => [r.id, mapListingRow(r)]));
-  const profilesById = new Map(((profilesRes.data as Row[]) ?? []).map((r) => [r.id, mapProfileRow(r)]));
+  const itemRows = (itemsRes.data as Row[]) ?? [];
+  const targetListingIds = swapRequests.map((sr) => sr.listingId);
+  const offeredListingIds = itemRows.map((r) => r.listing_id as string);
+  const allListingIds = Array.from(new Set([...targetListingIds, ...offeredListingIds]));
+
+  const { data: listingRows } = allListingIds.length
+    ? await supabase.from("listings").select("*").in("id", allListingIds)
+    : { data: [] as Row[] };
+
+  const listingsById = new Map(((listingRows as Row[]) ?? []).map((r) => [r.id as string, mapListingRow(r)]));
+  const profilesById = new Map(((profilesRes.data as Row[]) ?? []).map((r) => [r.id as string, mapProfileRow(r)]));
   const conversationBySwapId = new Map(
     ((conversationsRes.data as Row[]) ?? []).map((r) => [r.swap_request_id as string, r.id as string])
   );
+  const childBySwapId = new Map(
+    ((childrenRes.data as Row[]) ?? []).map((r) => [r.parent_request_id as string, r.id as string])
+  );
+
+  const offeredListingIdsBySwapId = new Map<string, string[]>();
+  for (const row of itemRows) {
+    const key = row.swap_request_id as string;
+    const list = offeredListingIdsBySwapId.get(key) ?? [];
+    list.push(row.listing_id as string);
+    offeredListingIdsBySwapId.set(key, list);
+  }
 
   return swapRequests.map((sr) => ({
     ...sr,
     listing: listingsById.get(sr.listingId) ?? null,
-    offeredListing: sr.offeredListingId ? listingsById.get(sr.offeredListingId) ?? null : null,
+    offeredListings: (offeredListingIdsBySwapId.get(sr.id) ?? [])
+      .map((id) => listingsById.get(id))
+      .filter((l): l is Listing => Boolean(l)),
     sender: profilesById.get(sr.senderId) ?? null,
     receiver: profilesById.get(sr.receiverId) ?? null,
     conversationId: conversationBySwapId.get(sr.id) ?? null,
+    counteredByRequestId: childBySwapId.get(sr.id) ?? null,
   }));
-}
-
-export async function getConversationForSwapRequest(
-  supabase: SupabaseClient,
-  swapRequestId: string
-): Promise<{ id: string } | null> {
-  const { data } = await supabase
-    .from("conversations")
-    .select("id")
-    .eq("swap_request_id", swapRequestId)
-    .maybeSingle();
-
-  return data ? { id: data.id } : null;
 }
 
 /** Receiver-only: accept or decline a pending request. */
@@ -174,8 +270,8 @@ export async function cancelSwapRequest(supabase: SupabaseClient, id: string): P
 }
 
 /** Marks the caller's side of an accepted swap as done. Once both sides
- * have confirmed, the `before_swap_request_update` trigger flips the
- * status to `completed` automatically. */
+ * have confirmed, the before_swap_request_update trigger flips the status
+ * to 'completed' automatically. */
 export async function markSwapSideComplete(
   supabase: SupabaseClient,
   id: string,
@@ -188,6 +284,3 @@ export async function markSwapSideComplete(
     .eq("id", id);
   if (error) throw new Error(error.message);
 }
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Row = Record<string, any>;

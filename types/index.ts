@@ -33,16 +33,20 @@ export interface ListingPhoto {
   createdAt: string;
 }
 
-/** Mirrors the `swap_requests.status` check constraint + state machine. */
-export type SwapRequestStatus = "pending" | "accepted" | "declined" | "cancelled" | "completed";
+/** Mirrors the `swap_requests.status` check constraint + state machine.
+ * 'countered' is terminal for that row — a new linked row (parentRequestId)
+ * carries the negotiation forward. */
+export type SwapRequestStatus = "pending" | "accepted" | "declined" | "cancelled" | "completed" | "countered";
 
 export interface SwapRequest {
   id: string;
   listingId: string;
   senderId: string;
   receiverId: string;
-  offeredListingId: string | null;
-  offeredItem: string | null;
+  /** Cash added on top of the offered item bundle, in cents. */
+  cashOfferCents: number;
+  /** Set when this row is a counter-offer replying to an earlier request. */
+  parentRequestId: string | null;
   status: SwapRequestStatus;
   senderCompletedAt: string | null;
   receiverCompletedAt: string | null;
@@ -53,10 +57,13 @@ export interface SwapRequest {
 /** A SwapRequest joined with the records a detail/list view needs to render. */
 export interface SwapRequestWithDetails extends SwapRequest {
   listing: Listing | null;
-  offeredListing: Listing | null;
+  /** The sender's offered bundle — one or more listings. */
+  offeredListings: Listing[];
   sender: Profile | null;
   receiver: Profile | null;
   conversationId: string | null;
+  /** Set if this request was itself superseded by a later counter-offer. */
+  counteredByRequestId: string | null;
 }
 
 export interface Conversation {

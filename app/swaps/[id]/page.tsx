@@ -1,14 +1,15 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowRightLeft, Package } from "lucide-react";
+import { ArrowRightLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { mapListingRow } from "@/lib/mappers";
 import { getSwapRequestById } from "@/lib/swap-requests";
 import { getMyRatingForSwap } from "@/lib/ratings";
 import { SwapStatusBadge } from "@/components/swap-status-badge";
 import { SwapActions } from "@/components/swap-actions";
 import { ChatThread } from "@/components/chat-thread";
 import { RatingPanel } from "@/components/rating-panel";
+import { OfferedBundleSummary } from "@/components/offered-bundle-summary";
 import type { Listing } from "@/types";
 
 interface SwapDetailPageProps {
@@ -39,8 +40,19 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
   const otherProfile = role === "sender" ? swapRequest.receiver : swapRequest.sender;
   const otherUserId = role === "sender" ? swapRequest.receiverId : swapRequest.senderId;
 
-  const myRating = swapRequest.status === "completed" ? await getMyRatingForSwap(supabase, swapRequest.id, user.id) : null;
+  const [myRating, { data: myListingRows }] = await Promise.all([
+    swapRequest.status === "completed"
+      ? getMyRatingForSwap(supabase, swapRequest.id, user.id)
+      : Promise.resolve(null),
+    supabase
+      .from("listings")
+      .select("*")
+      .eq("owner_id", user.id)
+      .eq("status", "available")
+      .order("created_at", { ascending: false }),
+  ]);
 
+  const myListings: Listing[] = (myListingRows ?? []).map(mapListingRow);
   const otherDisplayName = otherProfile?.fullName || otherProfile?.username || "another swapper";
 
   return (
@@ -62,16 +74,33 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
         <SwapStatusBadge status={swapRequest.status} />
       </div>
 
+      {swapRequest.parentRequestId && (
+        <Link
+          href={`/swaps/${swapRequest.parentRequestId}`}
+          className="mb-6 block text-sm text-muted-foreground hover:underline"
+        >
+          ← This is a counter-offer. View the original offer.
+        </Link>
+      )}
+
       {/* Item comparison */}
-      <div className="mb-8 grid grid-cols-1 items-center gap-4 sm:grid-cols-[1fr_auto_1fr]">
-        <ItemSummary label={role === "sender" ? "You offered" : "They offered"} listing={swapRequest.offeredListing} />
-        <ArrowRightLeft className="mx-auto h-5 w-5 text-muted-foreground" />
-        <ItemSummary label={role === "sender" ? "For their" : "For your"} listing={swapRequest.listing} />
+      <div className="mb-8 grid grid-cols-1 items-start gap-4 sm:grid-cols-[1fr_auto_1fr]">
+        <OfferedBundleSummary
+          label={role === "sender" ? "You offered" : "They offered"}
+          listings={swapRequest.offeredListings}
+          cashOfferCents={swapRequest.cashOfferCents}
+        />
+        <ArrowRightLeft className="mx-auto mt-4 h-5 w-5 shrink-0 text-muted-foreground" />
+        <OfferedBundleSummary
+          label={role === "sender" ? "For their" : "For your"}
+          listings={swapRequest.listing ? [swapRequest.listing] : []}
+          cashOfferCents={0}
+        />
       </div>
 
       {/* Actions */}
       <div className="mb-8">
-        <SwapActions swapRequest={swapRequest} role={role} currentUserId={user.id} />
+        <SwapActions swapRequest={swapRequest} role={role} currentUserId={user.id} myListings={myListings} />
       </div>
 
       {/* Rating (only once completed) */}
@@ -98,32 +127,6 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
           />
         </div>
       )}
-    </div>
-  );
-}
-
-function ItemSummary({ label, listing }: { label: string; listing: Listing | null }) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl border border-border p-3">
-      <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg bg-muted">
-        {listing?.imageUrl ? (
-          <Image src={listing.imageUrl} alt={listing.title} fill className="object-cover" />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
-            <Package className="h-6 w-6" />
-          </div>
-        )}
-      </div>
-      <div className="min-w-0">
-        <p className="text-xs text-muted-foreground">{label}</p>
-        {listing ? (
-          <Link href={`/listings/${listing.id}`} className="truncate text-sm font-medium hover:underline">
-            {listing.title}
-          </Link>
-        ) : (
-          <p className="text-sm text-muted-foreground">Item unavailable</p>
-        )}
-      </div>
     </div>
   );
 }

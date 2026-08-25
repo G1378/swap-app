@@ -1,109 +1,100 @@
-# Batch 3 — Delete Listing, Multi-Photo, Member Search, Category Pages, Block/Report
+# Batch 4 — Multi-Item Bundles, Cash Top-Up, Counter-Offers
 
-This zip contains only new/modified files, laid out at the paths they
-belong at in the `swap-app` repo. Copy them in directly, preserving folders.
+This is the biggest schema change so far — it replaces the swap request's
+single `offered_listing_id` column with a proper bundle model, adds cash on
+top, and adds real back-and-forth negotiation. This zip contains only
+new/modified files, laid out at the paths they belong at in the `swap-app`
+repo. Copy them in directly, preserving folders.
 
 ## What's new
 
-**Delete a listing**
-- Delete already existed on the Edit page — this batch hardens it rather
-  than duplicating it:
-  - Migration `0007` adds a DB-level trigger blocking deletion of any
-    listing that's part of an active (pending/accepted) swap, as either
-    the requested item *or* the offered item. Without this, deleting a
-    listing mid-swap would silently cascade-delete the `swap_requests`
-    row (and its conversation), destroying the other party's negotiation
-    with no warning.
-  - The Edit page's Delete button now only shows for `available`
-    listings; a short explanation replaces it otherwise.
-  - New **quick-delete** directly from the Listings grid on your own
-    profile (`owned-listing-card.tsx`) — no need to open Edit first.
-  - Both delete paths now also clean up the listing's storage files
-    (cover + gallery) best-effort.
+**Multi-item bundles** — "2 of my listings for your 1"
+- A sender can now offer *any number* of their own listings in a single
+  request, not just one. New `swap_request_items` table replaces the old
+  `offered_listing_id` column (which is dropped, after backfilling
+  existing single offers into the new table).
+- `swap-request-dialog.tsx`'s item picker is now multi-select instead of
+  single-select.
 
-**Multi-photo listings**
-- Migration `0007` adds a `listing_photos` table (up to 4 extra photos on
-  top of the existing single cover photo — `listings.image_url` is
-  untouched, so every existing card/consumer keeps working as-is).
-- Listing detail page now shows a real gallery with thumbnail switching.
-- Edit page gets a gallery editor (`components/listing-gallery.tsx`) —
-  add/remove save immediately, independent of the main form's Save button.
-- Scoped out: gallery editing on the **create** flow. A listing needs to
-  exist (and satisfy the owner-only RLS check) before photos can attach to
-  it, so multi-photo is edit-only; the create form just hints at this.
+**Cash top-up**
+- New `cash_offer_cents` column on `swap_requests` (stored in cents to
+  avoid float rounding). Shown as an optional dollar input alongside the
+  item picker, and as a "+ $X cash" badge everywhere an offer is displayed.
+- This was explicitly called out in your PRD's revenue model ("small
+  commission on cash top-up payments") but had no supporting feature at
+  all until now — the commission side still isn't implemented (no payment
+  processor is wired up anywhere in this app), just the data model and UI
+  for the cash amount itself.
 
-**Member search/directory**
-- New `/members` page — searchable by name, username, or location, mirrors
-  the same instant client-side filtering pattern as Discover.
-- Added "Members" to the navbar.
+**Counter-offers**
+- The receiver of a pending request can now propose different terms
+  instead of only accept/decline. A counter is a **new** `swap_requests`
+  row (linked back via `parent_request_id`), not an edit to the original —
+  this preserves full negotiation history. The original row flips to a new
+  terminal status, `countered`.
+- The chat thread carries over automatically across counters (same
+  conversation, not a fresh one each round) — see `handle_new_swap_request`
+  in the migration.
+- Each counter round works exactly like the original request: whoever
+  receives it can Accept / Decline / Counter again, so multi-round
+  back-and-forth just falls out of the existing accept/decline UI with no
+  special-casing needed.
 
-**Category browse pages**
-- New `/discover/[category]` routes with real, shareable URLs.
-- Discover's category chips are now actual links to these routes instead
-  of client-only state, so every category is browsable/bookmarkable even
-  with zero current listings in it.
-- Condition filter, sort, and search stay client-side within whichever
-  category view you're on.
-- Extracted `LISTING_CATEGORIES`/`LISTING_CONDITIONS` out of
-  `listing-form.tsx` into `lib/constants.ts` as the shared source of truth.
+## A note on transactional safety
 
-**Block / report users**
-- Migration `0008` adds `blocks` and `reports` tables, plus updates the
-  `swap_requests` insert policy so a swap request can't be created between
-  two users with a block relationship in either direction (defense in
-  depth — not just a UI hint).
-- New "..." menu on other users' profiles (`profile-actions-menu.tsx`):
-  Report user (reason + optional details) and Block/Unblock.
-- Blocked users' listings and profiles are filtered out of Discover,
-  category pages, and Members for both parties.
-- Reports are stored for later manual review — **there's no admin
-  dashboard in this app**, so nothing currently reads the `reports` table.
-  Flagging that as a known gap rather than pretending it's handled.
-- Scoped out: telling a user they've been blocked (kept private, matching
-  how most apps handle this), and retroactively hiding existing chat
-  history between blocked users (blocking stops *new* contact; past
-  conversations stay visible, which is standard behavior elsewhere too).
+Creating a request (or a counter) is two separate writes from the client
+— insert the `swap_requests` row, then insert its `swap_request_items`
+rows — since the Supabase client doesn't make multi-statement transactions
+easy without a dedicated RPC function. If the second write fails after the
+first succeeds, you'd be left with an item-less request row. This is a
+real but narrow edge case (a mid-request network blip), consistent with
+how a failed opening chat message already doesn't roll back request
+creation elsewhere in this codebase. Flagging it rather than pretending
+it's fully atomic — a proper fix would wrap both writes in a single
+Postgres function.
 
 ## Files touched
 
 New:
 ```
-prisma/migrations_manual/0007_listing_lifecycle.sql
-prisma/migrations_manual/0008_trust_safety.sql
-lib/constants.ts
-lib/storage.ts
-lib/listing-photos.ts
-lib/listings.ts
-lib/blocks.ts
-lib/reports.ts
-components/listing-gallery.tsx
-components/listing-photo-viewer.tsx
-components/member-card.tsx
-components/member-search-grid.tsx
-components/profile/profile-actions-menu.tsx
-app/discover/[category]/page.tsx
-app/members/page.tsx
+prisma/migrations_manual/0009_swap_bundles_and_counters.sql
+components/offer-builder.tsx
+components/counter-offer-dialog.tsx
+components/offered-bundle-summary.tsx
 ```
 
 Full replacement files (overwrite existing):
 ```
 types/index.ts
 lib/mappers.ts
-lib/profiles.ts
-components/listing-form.tsx
-components/owned-listing-card.tsx
-components/discover-grid.tsx
-components/navbar.tsx
-components/profile/profile-view.tsx
-app/discover/page.tsx
-app/listings/[id]/page.tsx
-app/listings/[id]/edit/page.tsx
+lib/utils.ts
+lib/swap-requests.ts
+components/swap-request-dialog.tsx
+components/swap-actions.tsx
+components/swap-status-badge.tsx
+components/swaps-list.tsx
+app/swaps/[id]/page.tsx
+```
+
+Not touched, and don't need to be — verified no other file in the repo
+references the removed `offeredListingId`/`offered_listing_id`/
+`offeredItem` fields:
+```
+components/listing-swap-action.tsx   (SwapRequestDialog's external props are unchanged)
+app/listings/[id]/page.tsx           (same reason)
+app/swaps/page.tsx                   (SwapsList's props are unchanged)
 ```
 
 ## Setup steps
 
-1. **Run both migrations** in the Supabase SQL editor, in order:
-   `0007_listing_lifecycle.sql`, then `0008_trust_safety.sql`.
+1. **Run the migration** in the Supabase SQL editor:
+   `0009_swap_bundles_and_counters.sql`.
 2. **Copy files in**, preserving paths (see list above).
 3. **No new npm dependencies.**
 4. Restart the dev server.
+
+**Heads up on existing data:** if you have any swap requests already sitting
+in `pending`/`accepted` status with the old single `offered_listing_id`
+when you run this migration, they'll be backfilled into the new bundle
+table automatically as part of the migration — no action needed, but worth
+knowing before running it against a database with real in-flight swaps.

@@ -6,7 +6,8 @@ import Image from "next/image";
 import { ArrowRightLeft, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SwapStatusBadge } from "@/components/swap-status-badge";
-import type { SwapRequestWithDetails } from "@/types";
+import { formatCents } from "@/lib/utils";
+import type { Listing, SwapRequestWithDetails } from "@/types";
 
 type Tab = "action" | "active" | "history";
 
@@ -33,7 +34,11 @@ export function SwapsList({
     const active = swapRequests.filter(
       (sr) => sr.status === "accepted" || (sr.status === "pending" && sr.senderId === currentUserId)
     );
-    const history = swapRequests.filter((sr) => sr.status === "completed" || sr.status === "declined" || sr.status === "cancelled");
+    const history = swapRequests.filter((sr) =>
+      (["completed", "declined", "cancelled", "countered"] as const).includes(
+        sr.status as "completed" | "declined" | "cancelled" | "countered"
+      )
+    );
     return { action, active, history };
   }, [swapRequests, currentUserId]);
 
@@ -68,8 +73,16 @@ export function SwapsList({
             const isSender = sr.senderId === currentUserId;
             const otherProfile = isSender ? sr.receiver : sr.sender;
             const theirItem = sr.listing;
-            const yourItem = sr.offeredListing;
+            const yourItems = sr.offeredListings;
             const unread = sr.conversationId ? unreadCounts[sr.conversationId] ?? 0 : 0;
+
+            const bundleLabel =
+              yourItems.length === 0
+                ? "an item"
+                : yourItems.length === 1
+                  ? yourItems[0].title
+                  : `${yourItems[0].title} + ${yourItems.length - 1} more`;
+            const cashSuffix = sr.cashOfferCents > 0 ? ` + ${formatCents(sr.cashOfferCents)}` : "";
 
             return (
               <li key={sr.id}>
@@ -77,14 +90,14 @@ export function SwapsList({
                   href={`/swaps/${sr.id}`}
                   className="flex items-center gap-4 rounded-xl border border-border p-4 transition-colors hover:bg-accent/50"
                 >
-                  <MiniThumb listing={isSender ? theirItem : yourItem} />
+                  <MiniThumbStack listings={isSender ? (theirItem ? [theirItem] : []) : yourItems} />
                   <ArrowRightLeft className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <MiniThumb listing={isSender ? yourItem : theirItem} />
+                  <MiniThumbStack listings={isSender ? yourItems : theirItem ? [theirItem] : []} />
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
-                      {isSender ? "You offered" : "They offered"} {yourItem?.title ?? "an item"} for{" "}
-                      {theirItem?.title ?? "an item"}
+                      {isSender ? "You offered" : "They offered"} {bundleLabel}
+                      {cashSuffix} for {theirItem?.title ?? "an item"}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {isSender ? "To" : "From"} {otherProfile?.fullName || otherProfile?.username || "a swapper"}
@@ -107,15 +120,35 @@ export function SwapsList({
   );
 }
 
-function MiniThumb({ listing }: { listing: SwapRequestWithDetails["listing"] }) {
-  return (
-    <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
-      {listing?.imageUrl ? (
-        <Image src={listing.imageUrl} alt={listing.title} fill className="object-cover" />
-      ) : (
+function MiniThumbStack({ listings }: { listings: Listing[] }) {
+  if (listings.length === 0) {
+    return (
+      <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
         <div className="flex h-full w-full items-center justify-center text-muted-foreground">
           <Package className="h-4 w-4" />
         </div>
+      </div>
+    );
+  }
+
+  const cover = listings[0];
+  const extra = listings.length - 1;
+
+  return (
+    <div className="relative h-12 w-12 shrink-0">
+      <div className="relative h-12 w-12 overflow-hidden rounded-lg border border-border bg-muted">
+        {cover.imageUrl ? (
+          <Image src={cover.imageUrl} alt={cover.title} fill className="object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+            <Package className="h-4 w-4" />
+          </div>
+        )}
+      </div>
+      {extra > 0 && (
+        <span className="absolute -bottom-1 -right-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border border-border bg-background px-1 text-[10px] font-semibold">
+          +{extra}
+        </span>
       )}
     </div>
   );
