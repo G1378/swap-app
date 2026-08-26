@@ -1,9 +1,17 @@
 import { createClient } from "@/lib/supabase/server";
-import { getAvailableListings, getOwnersByListingOwnerId } from "@/lib/listings";
+import { getAvailableListings, getMyAvailableListings, getOwnersByListingOwnerId } from "@/lib/listings";
 import { getBlockedEitherDirection } from "@/lib/blocks";
-import { LISTING_CATEGORIES } from "@/lib/constants";
-import { DiscoverGrid } from "@/components/discover-grid";
+import { findActiveSwapRequestsForListings } from "@/lib/swap-requests";
+import { getWishlistedListingIds } from "@/lib/wishlist";
+import { DiscoverReel } from "@/components/discover-reel";
+import type { Listing } from "@/types";
 
+/**
+ * Discover is now a full-screen, swipeable reel rather than a filterable
+ * grid — see components/discover-reel.tsx for the interaction. Browsing by
+ * category still works at /discover/[category], which keeps the original
+ * grid + filters (see app/discover/[category]/page.tsx).
+ */
 export default async function DiscoverPage() {
   const supabase = createClient();
   const {
@@ -11,21 +19,42 @@ export default async function DiscoverPage() {
   } = await supabase.auth.getUser();
 
   const blockedIds = user ? await getBlockedEitherDirection(supabase, user.id) : new Set<string>();
-  const listings = await getAvailableListings(supabase, { excludeOwnerIds: blockedIds });
+  // Also hide the viewer's own listings from their own feed — there's
+  // nothing to swap with yourself, so a self-owned card would just be a
+  // dead end mid-swipe.
+  const excludeOwnerIds = user ? new Set([...blockedIds, user.id]) : blockedIds;
+
+  const listings = await getAvailableListings(supabase, { excludeOwnerIds });
   const owners = await getOwnersByListingOwnerId(supabase, listings);
 
+  let myListings: Listing[] = [];
+  let wishlistedListingIds: string[] = [];
+  let activeSwapRequestByListingId: Record<string, string> = {};
+
+  if (user) {
+    const [mine, wishlisted, activeRequests] = await Promise.all([
+      getMyAvailableListings(supabase, user.id),
+      getWishlistedListingIds(supabase, user.id),
+      findActiveSwapRequestsForListings(
+        supabase,
+        listings.map((l) => l.id),
+        user.id
+      ),
+    ]);
+
+    myListings = mine;
+    wishlistedListingIds = Array.from(wishlisted);
+    activeSwapRequestByListingId = Object.fromEntries(activeRequests);
+  }
+
   return (
-    <div className="container py-10">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Discover</h1>
-        <p className="mt-1 text-muted-foreground">Browse items available to swap right now.</p>
-      </div>
-      <DiscoverGrid
-        listings={listings}
-        owners={owners}
-        categories={[...LISTING_CATEGORIES]}
-        activeCategory={null}
-      />
-    </div>
+    <DiscoverReel
+      listings={listings}
+      owners={owners}
+      currentUserId={user?.id ?? null}
+      myListings={myListings}
+      initialWishlistedListingIds={wishlistedListingIds}
+      activeSwapRequestByListingId={activeSwapRequestByListingId}
+    />
   );
 }

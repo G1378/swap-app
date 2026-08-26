@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { mapProfileRow } from "@/lib/mappers";
+import { mapListingRow, mapProfileRow } from "@/lib/mappers";
 import type { Listing, Profile } from "@/types";
 
 // Shown when the `listings` table is empty or not yet created, so Discover
@@ -114,21 +114,36 @@ export async function getAvailableListings(
   return options.excludeOwnerIds ? mapped.filter((l) => !options.excludeOwnerIds!.has(l.ownerId)) : mapped;
 }
 
-/** Owner username + name for each listing's byline, keyed by ownerId.
- * Mock listings ("mock" ownerId) simply won't have an entry. */
+/** Owner username, name, and avatar for each listing's byline, keyed by
+ * ownerId. Mock listings ("mock" ownerId) simply won't have an entry. */
 export async function getOwnersByListingOwnerId(
   supabase: SupabaseClient,
   listings: Listing[]
-): Promise<Record<string, Pick<Profile, "username" | "fullName">>> {
+): Promise<Record<string, Pick<Profile, "username" | "fullName" | "avatarUrl">>> {
   const ownerIds = Array.from(new Set(listings.map((l) => l.ownerId))).filter((id) => id !== "mock");
   if (ownerIds.length === 0) return {};
 
   const { data } = await supabase.from("profiles").select("*").in("id", ownerIds);
 
-  const result: Record<string, Pick<Profile, "username" | "fullName">> = {};
+  const result: Record<string, Pick<Profile, "username" | "fullName" | "avatarUrl">> = {};
   for (const row of data ?? []) {
     const profile = mapProfileRow(row);
-    result[profile.id] = { username: profile.username, fullName: profile.fullName };
+    result[profile.id] = { username: profile.username, fullName: profile.fullName, avatarUrl: profile.avatarUrl };
   }
   return result;
+}
+
+/** The signed-in user's own available listings — the inventory they can
+ * offer when building a swap request. Shared by the listing detail page
+ * and the Discover reel, both of which need to hand this to
+ * SwapRequestDialog/ListingSwapAction. */
+export async function getMyAvailableListings(supabase: SupabaseClient, userId: string): Promise<Listing[]> {
+  const { data } = await supabase
+    .from("listings")
+    .select("*")
+    .eq("owner_id", userId)
+    .eq("status", "available")
+    .order("created_at", { ascending: false });
+
+  return (data ?? []).map(mapListingRow);
 }

@@ -169,6 +169,31 @@ export async function findActiveSwapRequest(
   return data ? mapSwapRequestRow(data) : null;
 }
 
+/** Bulk version of findActiveSwapRequest — one query for every listing on
+ * screen instead of one per card. Used by the Discover reel, which needs
+ * this for a whole page of listings at once. Returns listingId -> the
+ * sender's pending/accepted swap_requests id for that listing. */
+export async function findActiveSwapRequestsForListings(
+  supabase: SupabaseClient,
+  listingIds: string[],
+  senderId: string
+): Promise<Map<string, string>> {
+  if (listingIds.length === 0) return new Map();
+
+  const { data } = await supabase
+    .from("swap_requests")
+    .select("id, listing_id")
+    .in("listing_id", listingIds)
+    .eq("sender_id", senderId)
+    .in("status", ["pending", "accepted"]);
+
+  const result = new Map<string, string>();
+  for (const row of (data as Row[]) ?? []) {
+    result.set(row.listing_id as string, row.id as string);
+  }
+  return result;
+}
+
 export async function listSwapRequestsForUser(
   supabase: SupabaseClient,
   userId: string
