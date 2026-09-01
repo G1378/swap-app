@@ -88,13 +88,11 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
         <OfferedBundleSummary
           label={role === "sender" ? "You offered" : "They offered"}
           listings={swapRequest.offeredListings}
-          cashOfferCents={swapRequest.cashOfferCents}
         />
         <ArrowRightLeft className="mx-auto mt-4 h-5 w-5 shrink-0 text-muted-foreground" />
         <OfferedBundleSummary
           label={role === "sender" ? "For their" : "For your"}
           listings={swapRequest.listing ? [swapRequest.listing] : []}
-          cashOfferCents={0}
         />
       </div>
 

@@ -43,8 +43,6 @@ export interface SwapRequest {
   listingId: string;
   senderId: string;
   receiverId: string;
-  /** Cash added on top of the offered item bundle, in cents. */
-  cashOfferCents: number;
   /** Set when this row is a counter-offer replying to an earlier request. */
   parentRequestId: string | null;
   status: SwapRequestStatus;
@@ -141,3 +139,9 @@ export interface WishlistEntry {
   createdAt: string;
   listing: Listing | null;
 }
+
+// --- Appended for lightweight gamification --------------------------------
+// Kept in a separate module (types/gamification.ts) since it's a distinct
+// domain from the core swap flow — re-exported here so existing
+// `import type { X } from "@/types"` call sites don't need to change.
+export * from "./gamification";

@@ -6,7 +6,6 @@ import Image from "next/image";
 import { ArrowRightLeft, Package } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SwapStatusBadge } from "@/components/swap-status-badge";
-import { formatCents } from "@/lib/utils";
 import type { Listing, SwapRequestWithDetails } from "@/types";
 
 type Tab = "action" | "active" | "history";
@@ -82,7 +81,6 @@ export function SwapsList({
                 : yourItems.length === 1
                   ? yourItems[0].title
                   : `${yourItems[0].title} + ${yourItems.length - 1} more`;
-            const cashSuffix = sr.cashOfferCents > 0 ? ` + ${formatCents(sr.cashOfferCents)}` : "";
 
             return (
               <li key={sr.id}>
@@ -96,8 +94,7 @@ export function SwapsList({
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
-                      {isSender ? "You offered" : "They offered"} {bundleLabel}
-                      {cashSuffix} for {theirItem?.title ?? "an item"}
+                      {isSender ? "You offered" : "They offered"} {bundleLabel} for {theirItem?.title ?? "an item"}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {isSender ? "To" : "From"} {otherProfile?.fullName || otherProfile?.username || "a swapper"}

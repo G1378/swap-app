@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { OfferBuilder } from "@/components/offer-builder";
-import { dollarsToCents } from "@/lib/utils";
 import type { Listing, SwapRequestWithDetails } from "@/types";
 
 interface CounterOfferDialogProps {
@@ -33,7 +32,6 @@ export function CounterOfferDialog({
   const supabase = createClient();
 
   const [selectedIds, setSelectedIds] = useState<string[]>(myListings[0] ? [myListings[0].id] : []);
-  const [cashDollars, setCashDollars] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +60,6 @@ export function CounterOfferDialog({
         senderId: currentUserId,
         receiverId: otherPartyId,
         offeredListingIds: selectedIds,
-        cashOfferCents: dollarsToCents(cashDollars),
         note,
       });
       router.push(`/swaps/${counter.id}`);
@@ -85,8 +82,6 @@ export function CounterOfferDialog({
           myListings={myListings}
           selectedIds={selectedIds}
           onToggle={toggleSelected}
-          cashDollars={cashDollars}
-          onCashChange={setCashDollars}
           itemsLabel="Your items to offer instead"
         />
 

@@ -24,16 +24,3 @@ export function timeAgo(iso: string): string {
   return `${years} year${years === 1 ? "" : "s"} ago`;
 }
 
-/** Formats a cents amount as USD, e.g. 1500 -> "$15.00". Used for the cash
- * top-up shown on swap offers. */
-export function formatCents(cents: number): string {
-  return (cents / 100).toLocaleString("en-US", { style: "currency", currency: "USD" });
-}
-
-/** Parses a dollar-amount input string into cents, e.g. "15.5" -> 1550.
- * Never throws — invalid or negative input just becomes 0. */
-export function dollarsToCents(value: string): number {
-  const parsed = Number.parseFloat(value);
-  if (!Number.isFinite(parsed) || parsed < 0) return 0;
-  return Math.round(parsed * 100);
-}

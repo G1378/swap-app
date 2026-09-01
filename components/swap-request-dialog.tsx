@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { OfferBuilder } from "@/components/offer-builder";
-import { dollarsToCents } from "@/lib/utils";
 import type { Listing } from "@/types";
 
 interface SwapRequestDialogProps {
@@ -26,7 +25,6 @@ export function SwapRequestDialog({ open, onClose, listing, senderId, myListings
   const supabase = createClient();
 
   const [selectedIds, setSelectedIds] = useState<string[]>(myListings[0] ? [myListings[0].id] : []);
-  const [cashDollars, setCashDollars] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -51,7 +49,6 @@ export function SwapRequestDialog({ open, onClose, listing, senderId, myListings
         senderId,
         receiverId: listing.ownerId,
         offeredListingIds: selectedIds,
-        cashOfferCents: dollarsToCents(cashDollars),
         note,
       });
       router.push(`/swaps/${swapRequest.id}`);
@@ -67,16 +64,10 @@ export function SwapRequestDialog({ open, onClose, listing, senderId, myListings
       open={open}
       onClose={onClose}
       title={`Request a swap for "${listing.title}"`}
-      description="Pick one or more of your own items to offer in return — add cash too if you'd like."
+      description="Pick one or more of your own items to offer in return."
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <OfferBuilder
-          myListings={myListings}
-          selectedIds={selectedIds}
-          onToggle={toggleSelected}
-          cashDollars={cashDollars}
-          onCashChange={setCashDollars}
-        />
+        <OfferBuilder myListings={myListings} selectedIds={selectedIds} onToggle={toggleSelected} />
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="note">Message (optional)</Label>

@@ -11,8 +11,6 @@ interface CreateSwapRequestInput {
   receiverId: string;
   /** One or more of the sender's own listings, offered as a bundle. */
   offeredListingIds: string[];
-  /** Optional cash added on top of the bundle, in cents. */
-  cashOfferCents?: number;
   note?: string;
 }
 
@@ -30,7 +28,6 @@ export async function createSwapRequest(
       listing_id: input.listingId,
       sender_id: input.senderId,
       receiver_id: input.receiverId,
-      cash_offer_cents: input.cashOfferCents ?? 0,
     })
     .select("*")
     .single();
@@ -56,7 +53,6 @@ interface CreateCounterOfferInput {
   senderId: string;
   receiverId: string;
   offeredListingIds: string[];
-  cashOfferCents?: number;
   note?: string;
 }
 
@@ -88,7 +84,6 @@ export async function createCounterOffer(
       listing_id: input.listingId,
       sender_id: input.senderId,
       receiver_id: input.receiverId,
-      cash_offer_cents: input.cashOfferCents ?? 0,
       parent_request_id: input.parentRequestId,
     })
     .select("*")

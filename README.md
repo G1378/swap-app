@@ -1,100 +1,121 @@
-# Batch 4 — Multi-Item Bundles, Cash Top-Up, Counter-Offers
+# Batch 5 — Gamification (MVP) + Cash Top-Up Removal
 
-This is the biggest schema change so far — it replaces the swap request's
-single `offered_listing_id` column with a proper bundle model, adds cash on
-top, and adds real back-and-forth negotiation. This zip contains only
-new/modified files, laid out at the paths they belong at in the `swap-app`
-repo. Copy them in directly, preserving folders.
+This zip contains only new/modified files, laid out at the paths they
+belong at in the `swap-app` repo. Copy them in directly, preserving
+folders.
 
 ## What's new
 
-**Multi-item bundles** — "2 of my listings for your 1"
-- A sender can now offer *any number* of their own listings in a single
-  request, not just one. New `swap_request_items` table replaces the old
-  `offered_listing_id` column (which is dropped, after backfilling
-  existing single offers into the new table).
-- `swap-request-dialog.tsx`'s item picker is now multi-select instead of
-  single-select.
+**Cash top-up removed**
+- `cash_offer_cents` is gone: dropped from the `swap_requests` table, and
+  every code path that read/wrote/displayed it (offer builder, both offer
+  dialogs, the bundle summary, the swaps list, the swap detail page,
+  `lib/swap-requests.ts`, `lib/mappers.ts`) has been stripped back to a
+  pure item-for-item flow. `formatCents`/`dollarsToCents` in `lib/utils.ts`
+  existed only for this feature and are removed too.
+- The Revenue Model's "small commission on cash top-up payments" line is
+  gone from `PROJECT_PLAN.md` — and, more importantly, so is the feature
+  it depended on. Swap-app is a pure swap marketplace: no cash-for-item,
+  and cash is never used to balance an uneven trade.
 
-**Cash top-up**
-- New `cash_offer_cents` column on `swap_requests` (stored in cents to
-  avoid float rounding). Shown as an optional dollar input alongside the
-  item picker, and as a "+ $X cash" badge everywhere an offer is displayed.
-- This was explicitly called out in your PRD's revenue model ("small
-  commission on cash top-up payments") but had no supporting feature at
-  all until now — the commission side still isn't implemented (no payment
-  processor is wired up anywhere in this app), just the data model and UI
-  for the cash amount itself.
+**Trader Levels, XP & Tiers**
+- New `gamification_profiles` table: one row per profile with `xp`,
+  `level`, `tier` (Bronze/Silver/Gold/Platinum), `points_balance`, and
+  weekly streak counters. Auto-provisioned via an `after insert on
+  profiles` trigger (plus a one-time backfill for existing profiles), so
+  the app can assume every profile has one.
+- XP amounts, level thresholds, and tier perks are all defined in
+  `lib/gamification/constants.ts` — one file, easy to retune.
 
-**Counter-offers**
-- The receiver of a pending request can now propose different terms
-  instead of only accept/decline. A counter is a **new** `swap_requests`
-  row (linked back via `parent_request_id`), not an edit to the original —
-  this preserves full negotiation history. The original row flips to a new
-  terminal status, `countered`.
-- The chat thread carries over automatically across counters (same
-  conversation, not a fresh one each round) — see `handle_new_swap_request`
-  in the migration.
-- Each counter round works exactly like the original request: whoever
-  receives it can Accept / Decline / Counter again, so multi-round
-  back-and-forth just falls out of the existing accept/decline UI with no
-  special-casing needed.
+**Streaks & Quests**
+- Streak counters live on `gamification_profiles`
+  (`current_streak_weeks` / `longest_streak_weeks` / `last_activity_week_start`).
+- New `quests` catalog + `user_quest_progress` table, seeded with the 5
+  weekly quests from the spec ("List a new item," "Reply to a match,"
+  "Complete a swap," plus two more) and 5 seasonal ones tied to the launch
+  categories.
 
-## A note on transactional safety
+**Leaderboards**
+- No new table — computed from existing `swap_requests`/`listings`/
+  `profiles` data. See `GAMIFICATION.md` for exactly which columns back
+  each metric and how category/regional scoping and the monthly reset
+  work.
 
-Creating a request (or a counter) is two separate writes from the client
-— insert the `swap_requests` row, then insert its `swap_request_items`
-rows — since the Supabase client doesn't make multi-statement transactions
-easy without a dedicated RPC function. If the second write fails after the
-first succeeds, you'd be left with an item-less request row. This is a
-real but narrow edge case (a mid-request network blip), consistent with
-how a failed opening chat message already doesn't roll back request
-creation elsewhere in this codebase. Flagging it rather than pretending
-it's fully atomic — a proper fix would wrap both writes in a single
-Postgres function.
+**Swap Points**
+- New `points_transactions` table: an append-only, auditable earn/spend
+  ledger. `points_balance` on `gamification_profiles` should always equal
+  the sum of a profile's transactions. Reasons and costs for each
+  redeemable perk are in `lib/gamification/constants.ts`.
+
+## What this batch deliberately does *not* do
+
+Schema, types, and tuning constants only — no automatic XP/points
+awarding, no streak bookkeeping, no quest-progress updates yet. The
+migration's closing comment points at the exact hook (`handle_swap_request_
+after_update()`'s existing `'completed'` branch) for wiring that up next.
+Tier perks and points-shop redemptions are documented as data but not yet
+enforced anywhere (no listing-cap check, no search-ranking boost, no
+featured-listing redemption flow). Full rationale in `GAMIFICATION.md`.
 
 ## Files touched
 
 New:
 ```
-prisma/migrations_manual/0009_swap_bundles_and_counters.sql
-components/offer-builder.tsx
-components/counter-offer-dialog.tsx
-components/offered-bundle-summary.tsx
+prisma/migrations_manual/0010_gamification_and_cash_removal.sql
+types/gamification.ts
+lib/gamification/constants.ts
+PROJECT_PLAN.md
+GAMIFICATION.md
 ```
 
 Full replacement files (overwrite existing):
 ```
+prisma/schema.prisma
 types/index.ts
 lib/mappers.ts
 lib/utils.ts
 lib/swap-requests.ts
+components/offer-builder.tsx
 components/swap-request-dialog.tsx
-components/swap-actions.tsx
-components/swap-status-badge.tsx
+components/counter-offer-dialog.tsx
+components/offered-bundle-summary.tsx
 components/swaps-list.tsx
 app/swaps/[id]/page.tsx
+README.md (this file)
 ```
 
-Not touched, and don't need to be — verified no other file in the repo
-references the removed `offeredListingId`/`offered_listing_id`/
-`offeredItem` fields:
-```
-components/listing-swap-action.tsx   (SwapRequestDialog's external props are unchanged)
-app/listings/[id]/page.tsx           (same reason)
-app/swaps/page.tsx                   (SwapsList's props are unchanged)
-```
+Not touched — verified no other file in the repo references
+`cashOfferCents`/`cash_offer_cents`, `formatCents`, or `dollarsToCents`:
+grepped the full `app/`, `components/`, `lib/`, `types/` trees.
 
 ## Setup steps
 
-1. **Run the migration** in the Supabase SQL editor:
-   `0009_swap_bundles_and_counters.sql`.
+1. **Run the migration** in the Supabase SQL editor, after 0001–0009:
+   `0010_gamification_and_cash_removal.sql`.
 2. **Copy files in**, preserving paths (see list above).
 3. **No new npm dependencies.**
 4. Restart the dev server.
 
-**Heads up on existing data:** if you have any swap requests already sitting
-in `pending`/`accepted` status with the old single `offered_listing_id`
-when you run this migration, they'll be backfilled into the new bundle
-table automatically as part of the migration — no action needed, but worth
-knowing before running it against a database with real in-flight swaps.
+**Heads up on existing data:** dropping `cash_offer_cents` permanently
+discards whatever cash amounts were sitting on existing swap requests —
+there's no migration path for that value since the feature it supported no
+longer exists. If any pending/accepted requests currently have a non-zero
+cash offer, decide how you want to handle those in-flight conversations
+(e.g. a heads-up message) before running this against a database with real
+data in it.
+
+## Verification
+
+No live Postgres/Supabase instance or `binaries.prisma.sh` access in this
+environment, so verification here was:
+- `npx tsc --noEmit` — clean, no type errors.
+- `npx next build` — clean production build, all routes compiled
+  (including `/swaps` and `/swaps/[id]`, the pages most affected by the
+  cash removal).
+- Every file in `prisma/migrations_manual/`, including the new one, parsed
+  successfully with a standalone Postgres SQL parser (`pglast`) as a
+  syntax sanity check, since `prisma validate`/`prisma generate` need an
+  engine binary this sandbox can't reach.
+
+Worth running `npx prisma validate` and the migration itself against a
+real Supabase project before merging, as usual.

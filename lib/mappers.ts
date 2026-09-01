@@ -63,7 +63,6 @@ export function mapSwapRequestRow(row: Row): SwapRequest {
     listingId: row.listing_id,
     senderId: row.sender_id,
     receiverId: row.receiver_id,
-    cashOfferCents: row.cash_offer_cents ?? 0,
     parentRequestId: row.parent_request_id ?? null,
     status: row.status,
     senderCompletedAt: row.sender_completed_at ?? null,

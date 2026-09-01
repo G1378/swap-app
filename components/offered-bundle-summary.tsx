@@ -1,20 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Package } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { formatCents } from "@/lib/utils";
 import type { Listing } from "@/types";
 
 interface OfferedBundleSummaryProps {
   label: string;
   listings: Listing[];
-  cashOfferCents: number;
 }
 
-/** Renders one side of a swap comparison — one or more offered listings
- * plus an optional cash top-up. Used for both the (possibly multi-item)
- * offered bundle and the single requested listing on the swap detail page. */
-export function OfferedBundleSummary({ label, listings, cashOfferCents }: OfferedBundleSummaryProps) {
+/** Renders one side of a swap comparison — one or more offered listings.
+ * Used for both the (possibly multi-item) offered bundle and the single
+ * requested listing on the swap detail page. */
+export function OfferedBundleSummary({ label, listings }: OfferedBundleSummaryProps) {
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-border p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
@@ -38,12 +35,6 @@ export function OfferedBundleSummary({ label, listings, cashOfferCents }: Offere
             </Link>
           ))}
         </div>
-      )}
-
-      {cashOfferCents > 0 && (
-        <Badge variant="accent" className="w-fit">
-          + {formatCents(cashOfferCents)} cash
-        </Badge>
       )}
     </div>
   );
