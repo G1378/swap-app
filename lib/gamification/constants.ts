@@ -1,4 +1,4 @@
-import type { TraderTier } from "@/types";
+import type { LevelProgress, TraderTier } from "@/types";
 
 /**
  * Single source of truth for gamification tuning: XP awards, level/tier
@@ -85,6 +85,30 @@ export function tierForLevel(level: number): TraderTier {
  * otherwise need the intermediate level number. */
 export function tierForXp(xp: number): TraderTier {
   return tierForLevel(levelForXp(xp));
+}
+
+/** Everything the profile panel's XP bar needs, derived from total XP.
+ * See the `LevelProgress` type (types/gamification.ts) for field meanings. */
+export function getLevelProgress(xp: number): LevelProgress {
+  const level = levelForXp(xp);
+  const tier = tierForLevel(level);
+  const currentFloor = LEVEL_XP_THRESHOLDS[level - 1] ?? 0;
+  const nextThreshold = LEVEL_XP_THRESHOLDS[level] as number | undefined;
+
+  if (nextThreshold === undefined) {
+    // Top defined level — nothing further to show progress toward.
+    return { level, tier, xpIntoLevel: xp - currentFloor, xpForNextLevel: null, progressFraction: 1 };
+  }
+
+  const xpIntoLevel = xp - currentFloor;
+  const xpForNextLevel = nextThreshold - currentFloor;
+  return {
+    level,
+    tier,
+    xpIntoLevel,
+    xpForNextLevel,
+    progressFraction: xpForNextLevel > 0 ? Math.min(1, xpIntoLevel / xpForNextLevel) : 1,
+  };
 }
 
 // --- Tier perks -------------------------------------------------------

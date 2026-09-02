@@ -1,12 +1,17 @@
 import type {
   AppNotification,
+  Badge,
   Conversation,
+  GamificationProfile,
   Listing,
   ListingPhoto,
   Message,
   Profile,
+  Quest,
   Rating,
   SwapRequest,
+  UserBadgeWithBadge,
+  UserQuestProgressWithQuest,
 } from "@/types";
 
 /**
@@ -112,5 +117,79 @@ export function mapNotificationRow(row: Row): AppNotification {
     link: row.link ?? null,
     isRead: row.is_read,
     createdAt: row.created_at,
+  };
+}
+
+// --- Appended for lightweight gamification --------------------------------
+
+export function mapGamificationProfileRow(row: Row): GamificationProfile {
+  return {
+    id: row.id,
+    profileId: row.profile_id,
+    xp: row.xp,
+    level: row.level,
+    tier: row.tier,
+    pointsBalance: row.points_balance,
+    currentStreakWeeks: row.current_streak_weeks,
+    longestStreakWeeks: row.longest_streak_weeks,
+    profileCompletedBonusAwarded: row.profile_completed_bonus_awarded ?? false,
+    lastActivityWeekStart: row.last_activity_week_start ?? null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function mapBadgeRow(row: Row): Badge {
+  return {
+    id: row.id,
+    slug: row.slug,
+    label: row.label,
+    description: row.description,
+    icon: row.icon,
+    createdAt: row.created_at,
+  };
+}
+
+/** Expects a `user_badges` row with an embedded `badge:badges(*)` join,
+ * as returned by `select("*, badge:badges(*)")`. */
+export function mapUserBadgeWithBadgeRow(row: Row): UserBadgeWithBadge {
+  return {
+    id: row.id,
+    gamificationProfileId: row.gamification_profile_id,
+    badgeId: row.badge_id,
+    earnedAt: row.earned_at,
+    badge: mapBadgeRow(row.badge),
+  };
+}
+
+export function mapQuestRow(row: Row): Quest {
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    description: row.description,
+    cadence: row.cadence,
+    category: row.category ?? null,
+    xpReward: row.xp_reward,
+    pointsReward: row.points_reward,
+    isActive: row.is_active,
+    createdAt: row.created_at,
+  };
+}
+
+/** Expects a `user_quest_progress` row with an embedded `quest:quests(*)`
+ * join, as returned by `select("*, quest:quests(*)")`. */
+export function mapUserQuestProgressWithQuestRow(row: Row): UserQuestProgressWithQuest {
+  return {
+    id: row.id,
+    gamificationProfileId: row.gamification_profile_id,
+    questId: row.quest_id,
+    status: row.status,
+    progressCount: row.progress_count,
+    targetCount: row.target_count,
+    periodStart: row.period_start,
+    completedAt: row.completed_at ?? null,
+    createdAt: row.created_at,
+    quest: mapQuestRow(row.quest),
   };
 }

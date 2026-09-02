@@ -5,6 +5,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { ImagePlus, Loader2, Pencil } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { claimProfileCompletionReward } from "@/lib/gamification/queries";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,8 @@ export function EditProfileDialog({ profile, userId, fallbackUsername }: EditPro
         .upsert({ id: userId, ...payload }, { onConflict: "id" });
 
       if (upsertError) throw new Error(upsertError.message);
+
+      await claimProfileCompletionReward(supabase);
 
       setOpen(false);
       router.refresh();

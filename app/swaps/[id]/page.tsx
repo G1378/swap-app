@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { mapListingRow } from "@/lib/mappers";
 import { getSwapRequestById } from "@/lib/swap-requests";
 import { getMyRatingForSwap } from "@/lib/ratings";
+import { claimSwapCompletionReward } from "@/lib/gamification/queries";
 import { SwapStatusBadge } from "@/components/swap-status-badge";
 import { SwapActions } from "@/components/swap-actions";
 import { ChatThread } from "@/components/chat-thread";
@@ -39,6 +40,13 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
   const role: "sender" | "receiver" = swapRequest.senderId === user.id ? "sender" : "receiver";
   const otherProfile = role === "sender" ? swapRequest.receiver : swapRequest.sender;
   const otherUserId = role === "sender" ? swapRequest.receiverId : swapRequest.senderId;
+
+  // Best-effort: awards this viewer's share of the swap-completion XP/points
+  // the first time they see it completed. Idempotent server-side, so it's
+  // safe to call on every view rather than only the exact moment it flips.
+  if (swapRequest.status === "completed") {
+    await claimSwapCompletionReward(supabase, swapRequest.id);
+  }
 
   const [myRating, { data: myListingRows }] = await Promise.all([
     swapRequest.status === "completed"

@@ -1,5 +1,6 @@
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { mapMessageRow } from "@/lib/mappers";
+import { bumpQuestProgress } from "@/lib/gamification/queries";
 import type { Message } from "@/types";
 
 export async function listMessages(supabase: SupabaseClient, conversationId: string): Promise<Message[]> {
@@ -33,6 +34,8 @@ export async function sendMessage(
   if (error || !data) {
     throw new Error(error?.message ?? "Failed to send message.");
   }
+
+  await bumpQuestProgress(supabase, "reply-to-a-match");
 
   return mapMessageRow(data);
 }

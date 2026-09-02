@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapProfileRow, mapRatingRow } from "@/lib/mappers";
+import { bumpQuestProgress } from "@/lib/gamification/queries";
 import type { Rating, RatingBreakdown, RatingSummary, RatingWithAuthor } from "@/types";
 
 interface CreateRatingInput {
@@ -26,6 +27,8 @@ export async function createRating(supabase: SupabaseClient, input: CreateRating
   if (error || !data) {
     throw new Error(error?.message ?? "Failed to submit rating.");
   }
+
+  await bumpQuestProgress(supabase, "leave-a-rating");
 
   return mapRatingRow(data);
 }

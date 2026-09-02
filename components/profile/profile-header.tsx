@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import { ArrowRightLeft, CalendarDays, MapPin, Package, Star } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { BadgePill } from "@/components/profile/badge-pill";
-import type { Profile, ProfileBadge, RatingSummary } from "@/types";
+import { GamificationPanel } from "@/components/gamification/gamification-panel";
+import type { GamificationProfile, Profile, ProfileBadge, RatingSummary, UserBadgeWithBadge } from "@/types";
 
 interface ProfileHeaderProps {
   profile: Profile;
@@ -13,6 +14,11 @@ interface ProfileHeaderProps {
   completedSwaps: number;
   badges: ProfileBadge[];
   memberSince: string;
+  /** Null only in the moment before a new profile's gamification row has
+   * been provisioned — the panel just doesn't render in that case. */
+  gamification: GamificationProfile | null;
+  gamificationBadges: UserBadgeWithBadge[];
+  isOwnProfile: boolean;
   action?: ReactNode;
 }
 
@@ -25,6 +31,9 @@ export function ProfileHeader({
   completedSwaps,
   badges,
   memberSince,
+  gamification,
+  gamificationBadges,
+  isOwnProfile,
   action,
 }: ProfileHeaderProps) {
   return (
@@ -81,6 +90,10 @@ export function ProfileHeader({
           </div>
 
           {profile.bio && <p className="mt-3 max-w-2xl text-sm">{profile.bio}</p>}
+
+          {gamification && (
+            <GamificationPanel gamification={gamification} badges={gamificationBadges} isOwnProfile={isOwnProfile} />
+          )}
         </div>
       </div>
     </div>

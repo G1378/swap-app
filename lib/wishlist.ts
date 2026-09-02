@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapListingRow } from "@/lib/mappers";
+import { bumpQuestProgress } from "@/lib/gamification/queries";
 import type { WishlistEntry } from "@/types";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,6 +55,10 @@ export async function addToWishlist(
 
   // 23505 = unique_violation — already wishlisted, treat as a no-op success.
   if (error && error.code !== "23505") throw new Error(error.message);
+
+  if (!error) {
+    await bumpQuestProgress(supabase, "update-your-wishlist");
+  }
 }
 
 export async function removeFromWishlist(

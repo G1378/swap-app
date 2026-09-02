@@ -1,121 +1,146 @@
-# Batch 5 — Gamification (MVP) + Cash Top-Up Removal
+# Batch 6 — Wire up gamification (header pill, profile panel, quests page)
 
 This zip contains only new/modified files, laid out at the paths they
 belong at in the `swap-app` repo. Copy them in directly, preserving
-folders.
+folders. **Apply after Batch 5** (migration 0010) — this batch adds
+migration 0011 on top of it.
+
+## Why this batch
+
+Batch 5 shipped the gamification *schema* only — tables, types, seed data,
+no UI, no awarding logic. That meant nothing was visible: no way to see
+your own points/level, no way to see anyone else's, no way to view or
+track quests. This batch closes that gap: it wires up real XP/points
+awarding and builds the three surfaces prioritized out of the earlier
+brainstorm (header pill, profile panel, quests page — leaderboard and
+"badges everywhere" were explicitly deferred).
 
 ## What's new
 
-**Cash top-up removed**
-- `cash_offer_cents` is gone: dropped from the `swap_requests` table, and
-  every code path that read/wrote/displayed it (offer builder, both offer
-  dialogs, the bundle summary, the swaps list, the swap detail page,
-  `lib/swap-requests.ts`, `lib/mappers.ts`) has been stripped back to a
-  pure item-for-item flow. `formatCents`/`dollarsToCents` in `lib/utils.ts`
-  existed only for this feature and are removed too.
-- The Revenue Model's "small commission on cash top-up payments" line is
-  gone from `PROJECT_PLAN.md` — and, more importantly, so is the feature
-  it depended on. Swap-app is a pure swap marketplace: no cash-for-item,
-  and cash is never used to balance an uneven trade.
+**Awarding, for real** (`prisma/migrations_manual/0011_gamification_wiring.sql`)
+- Four `SECURITY DEFINER` Postgres functions, called via `supabase.rpc(...)`
+  — the first use of `.rpc()` in this app. `gamification_profiles` /
+  `points_transactions` / `user_quest_progress` still have no client-write
+  RLS policy; these functions are the only path in, and each validates
+  eligibility itself (idempotent, safe to call speculatively).
+- `claim_swap_completion_reward` — +50 XP / +20 points per participant,
+  once per swap. Called from the swap detail page.
+- `refresh_quest_board` + `bump_quest_progress` — provisions this week's 3
+  rotated-in quests (deterministic round-robin, no stored "assignment")
+  and increments progress on the matching action.
+- `claim_profile_completion_reward` — one-time +20 XP, piggybacking on the
+  existing `profiles.onboarding_completed` flag.
+- New column: `gamification_profiles.profile_completed_bonus_awarded`
+  (guards the one-time bonus above). Mirrored in `prisma/schema.prisma`.
 
-**Trader Levels, XP & Tiers**
-- New `gamification_profiles` table: one row per profile with `xp`,
-  `level`, `tier` (Bronze/Silver/Gold/Platinum), `points_balance`, and
-  weekly streak counters. Auto-provisioned via an `after insert on
-  profiles` trigger (plus a one-time backfill for existing profiles), so
-  the app can assume every profile has one.
-- XP amounts, level thresholds, and tier perks are all defined in
-  `lib/gamification/constants.ts` — one file, easy to retune.
+**Hooked into the actions that should trigger them**
+- `lib/wishlist.ts`, `lib/messages.ts`, `lib/ratings.ts` — bump the
+  matching quest right after their insert succeeds.
+- `components/listing-form.tsx` — bumps `list-an-item` after a new listing
+  is published (not on edits).
+- `components/profile/edit-profile-dialog.tsx` — claims the
+  profile-completion bonus after a save.
+- `app/swaps/[id]/page.tsx` — claims the swap-completion reward whenever
+  the current viewer looks at a completed swap (covers both participants,
+  whichever of them next opens the page).
+- All of these are best-effort: on failure they log and move on, never
+  block the primary action.
 
-**Streaks & Quests**
-- Streak counters live on `gamification_profiles`
-  (`current_streak_weeks` / `longest_streak_weeks` / `last_activity_week_start`).
-- New `quests` catalog + `user_quest_progress` table, seeded with the 5
-  weekly quests from the spec ("List a new item," "Reply to a match,"
-  "Complete a swap," plus two more) and 5 seasonal ones tied to the launch
-  categories.
+**Three new UI surfaces**
+- **Header pill** — tier icon + points balance, always visible when
+  signed in (`components/gamification/header-gamification-pill.tsx`,
+  wired into `components/navbar.tsx`, which now also fetches the viewer's
+  gamification profile alongside their regular profile/notification data).
+- **Profile panel** — tier, level, XP progress bar, streak, earned badges;
+  points balance only on your own profile
+  (`components/gamification/gamification-panel.tsx`, wired into
+  `components/profile/profile-header.tsx` via `profile-view.tsx`, so it
+  renders on both `/profile` and `/profile/[username]`).
+- **Quests page** — this week's 3 rotated quests + active seasonal ones,
+  each a simple done/not-done card with a reward chip
+  (`app/quests/page.tsx` + `components/gamification/quest-card.tsx`),
+  linked from the navbar.
+- Supporting pieces: `components/gamification/tier-badge.tsx` (shared
+  tier icon/label/color), `components/gamification/user-badge-pill.tsx`
+  (renders the new stored `Badge` type — separate from the existing
+  ad-hoc `ProfileBadge` pills, which are untouched).
 
-**Leaderboards**
-- No new table — computed from existing `swap_requests`/`listings`/
-  `profiles` data. See `GAMIFICATION.md` for exactly which columns back
-  each metric and how category/regional scoping and the monthly reset
-  work.
+**Reads + types**
+- `lib/gamification/queries.ts` (new) — all reads plus the RPC wrappers
+  described above.
+- `lib/mappers.ts` — row mappers for the four gamification tables.
+- `types/gamification.ts` — added `profileCompletedBonusAwarded` and a new
+  `LevelProgress` type.
+- `lib/gamification/constants.ts` — added `getLevelProgress(xp)`, used by
+  the profile panel's XP bar.
 
-**Swap Points**
-- New `points_transactions` table: an append-only, auditable earn/spend
-  ledger. `points_balance` on `gamification_profiles` should always equal
-  the sum of a profile's transactions. Reasons and costs for each
-  redeemable perk are in `lib/gamification/constants.ts`.
+## What's still not wired up
 
-## What this batch deliberately does *not* do
-
-Schema, types, and tuning constants only — no automatic XP/points
-awarding, no streak bookkeeping, no quest-progress updates yet. The
-migration's closing comment points at the exact hook (`handle_swap_request_
-after_update()`'s existing `'completed'` branch) for wiring that up next.
-Tier perks and points-shop redemptions are documented as data but not yet
-enforced anywhere (no listing-cap check, no search-ranking boost, no
-featured-listing redemption flow). Full rationale in `GAMIFICATION.md`.
+- **Referrals** and **chain-leg XP** — inert, no underlying feature exists
+  yet for either (no referral system, no multi-person chain matching).
+- **Streak counters** — `current_streak_weeks` doesn't update
+  automatically yet; needs its own "was last week already counted" logic.
+- **Tier perks and points-shop spends** — still documentation-as-data in
+  `TIER_PERKS`/`POINTS_COSTS`, not enforced anywhere.
+- **Leaderboard page** and **tier badges on member cards/listings/chat** —
+  explicitly deferred; not part of the three surfaces prioritized.
 
 ## Files touched
 
 New:
 ```
-prisma/migrations_manual/0010_gamification_and_cash_removal.sql
-types/gamification.ts
-lib/gamification/constants.ts
-PROJECT_PLAN.md
-GAMIFICATION.md
+prisma/migrations_manual/0011_gamification_wiring.sql
+lib/gamification/queries.ts
+components/gamification/tier-badge.tsx
+components/gamification/header-gamification-pill.tsx
+components/gamification/user-badge-pill.tsx
+components/gamification/gamification-panel.tsx
+components/gamification/quest-card.tsx
+app/quests/page.tsx
 ```
 
 Full replacement files (overwrite existing):
 ```
 prisma/schema.prisma
-types/index.ts
+types/gamification.ts
+lib/gamification/constants.ts
 lib/mappers.ts
-lib/utils.ts
-lib/swap-requests.ts
-components/offer-builder.tsx
-components/swap-request-dialog.tsx
-components/counter-offer-dialog.tsx
-components/offered-bundle-summary.tsx
-components/swaps-list.tsx
+lib/wishlist.ts
+lib/messages.ts
+lib/ratings.ts
+components/listing-form.tsx
+components/profile/edit-profile-dialog.tsx
 app/swaps/[id]/page.tsx
+components/navbar.tsx
+components/profile/profile-view.tsx
+components/profile/profile-header.tsx
+GAMIFICATION.md
 README.md (this file)
 ```
 
-Not touched — verified no other file in the repo references
-`cashOfferCents`/`cash_offer_cents`, `formatCents`, or `dollarsToCents`:
-grepped the full `app/`, `components/`, `lib/`, `types/` trees.
-
 ## Setup steps
 
-1. **Run the migration** in the Supabase SQL editor, after 0001–0009:
-   `0010_gamification_and_cash_removal.sql`.
+1. **Run the migration** in the Supabase SQL editor, after 0001–0010:
+   `0011_gamification_wiring.sql`.
 2. **Copy files in**, preserving paths (see list above).
-3. **No new npm dependencies.**
+3. **No new npm dependencies** — only new lucide-react icons, already in
+   the existing dependency.
 4. Restart the dev server.
-
-**Heads up on existing data:** dropping `cash_offer_cents` permanently
-discards whatever cash amounts were sitting on existing swap requests —
-there's no migration path for that value since the feature it supported no
-longer exists. If any pending/accepted requests currently have a non-zero
-cash offer, decide how you want to handle those in-flight conversations
-(e.g. a heads-up message) before running this against a database with real
-data in it.
 
 ## Verification
 
-No live Postgres/Supabase instance or `binaries.prisma.sh` access in this
-environment, so verification here was:
-- `npx tsc --noEmit` — clean, no type errors.
-- `npx next build` — clean production build, all routes compiled
-  (including `/swaps` and `/swaps/[id]`, the pages most affected by the
-  cash removal).
-- Every file in `prisma/migrations_manual/`, including the new one, parsed
-  successfully with a standalone Postgres SQL parser (`pglast`) as a
-  syntax sanity check, since `prisma validate`/`prisma generate` need an
-  engine binary this sandbox can't reach.
+Same constraint as Batch 5 — no live Postgres/Supabase or
+`binaries.prisma.sh` access in this environment:
+- `npx tsc --noEmit` — clean.
+- `npx next build` — clean production build, all 21 routes compiled,
+  including the new `/quests` route and the modified `/profile`,
+  `/profile/[username]`, and `/swaps/[id]` routes.
+- `0011_gamification_wiring.sql` parsed successfully with the same
+  standalone Postgres SQL parser used for Batch 5's migration. That parser
+  only validates the outer SQL — the `plpgsql` function bodies (the actual
+  award logic) were checked by hand, statement by statement, since nothing
+  in this sandbox can execute `plpgsql` without a live Postgres server.
 
-Worth running `npx prisma validate` and the migration itself against a
-real Supabase project before merging, as usual.
+Worth running this against a real Supabase project — especially the four
+new RPC functions — before merging, since `plpgsql` body correctness
+couldn't be machine-verified here.

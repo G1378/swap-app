@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getProfileById, getProfileListings, getCompletedSwapCount } from "@/lib/profiles";
 import { getProfileRatingSummary, getRatingBreakdown, listRatingsForProfile } from "@/lib/ratings";
 import { getWishlist, getWishlistedListingIds } from "@/lib/wishlist";
+import { getGamificationProfile, getUserBadges } from "@/lib/gamification/queries";
 import { computeBadges } from "@/lib/badges";
 import { isBlocked } from "@/lib/blocks";
 import { ProfileHeader } from "@/components/profile/profile-header";
@@ -46,6 +47,9 @@ export async function ProfileView({ profileId, fallbackUsername, viewerId }: Pro
     viewerId && !isOwnProfile ? getWishlistedListingIds(supabase, viewerId) : Promise.resolve(new Set<string>()),
   ]);
 
+  const gamification = await getGamificationProfile(supabase, profileId);
+  const gamificationBadges = gamification ? await getUserBadges(supabase, gamification.id) : [];
+
   const displayName = profile?.fullName || profile?.username || fallbackUsername;
   const username = profile?.username ?? fallbackUsername;
   const memberSince = formatMemberSince(profile?.createdAt ?? new Date().toISOString());
@@ -73,6 +77,9 @@ export async function ProfileView({ profileId, fallbackUsername, viewerId }: Pro
         completedSwaps={completedSwaps}
         badges={badges}
         memberSince={memberSince}
+        gamification={gamification}
+        gamificationBadges={gamificationBadges}
+        isOwnProfile={isOwnProfile}
         action={
           isOwnProfile ? (
             <EditProfileDialog profile={profile} userId={profileId} fallbackUsername={fallbackUsername} />

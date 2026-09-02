@@ -38,6 +38,9 @@ export interface GamificationProfile {
    * casual users. */
   currentStreakWeeks: number;
   longestStreakWeeks: number;
+  /** One-time flag guarding the profile-completion XP bonus — internal
+   * bookkeeping, not generally something the UI needs to branch on. */
+  profileCompletedBonusAwarded: boolean;
   /** Monday (UTC) of the most recent week that counted toward the streak,
    * as an ISO date (`YYYY-MM-DD`). Null until the first qualifying action. */
   lastActivityWeekStart: string | null;
@@ -177,4 +180,19 @@ export interface LeaderboardEntry {
   chainsClosed: number;
   /** 0–1. See GAMIFICATION.md for the exact definition. */
   onTimeRate: number;
+}
+
+/** What the profile panel's XP bar needs — computed from `xp` via
+ * `getLevelProgress()` in `lib/gamification/constants.ts` rather than
+ * stored, so retuning the level thresholds doesn't require a migration. */
+export interface LevelProgress {
+  level: number;
+  tier: TraderTier;
+  /** XP earned since the start of the current level. */
+  xpIntoLevel: number;
+  /** XP needed to go from the current level to the next one. Null at the
+   * top defined level — there's nothing further to progress toward. */
+  xpForNextLevel: number | null;
+  /** 0–1, for a progress bar. 1 (full) at the top defined level. */
+  progressFraction: number;
 }

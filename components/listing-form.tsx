@@ -7,6 +7,7 @@ import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getPhotosForListing } from "@/lib/listing-photos";
 import { deleteListingImages } from "@/lib/storage";
+import { bumpQuestProgress } from "@/lib/gamification/queries";
 import { LISTING_CATEGORIES, LISTING_CONDITIONS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +85,7 @@ export function ListingForm({ mode, userId, listing }: ListingFormProps) {
           .from("listings")
           .insert({ ...payload, owner_id: userId, status: "available" });
         if (insertError) throw new Error(insertError.message);
+        await bumpQuestProgress(supabase, "list-an-item");
       } else if (listing) {
         const { error: updateError } = await supabase
           .from("listings")

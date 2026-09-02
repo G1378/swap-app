@@ -4,8 +4,10 @@ import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
 import { getProfileById } from "@/lib/profiles";
 import { getUnreadNotificationCount } from "@/lib/notifications";
+import { getGamificationProfile } from "@/lib/gamification/queries";
 import { NotificationBell } from "@/components/notification-bell";
 import { UserMenu } from "@/components/user-menu";
+import { HeaderGamificationPill } from "@/components/gamification/header-gamification-pill";
 
 export async function Navbar() {
   const supabase = createClient();
@@ -13,9 +15,13 @@ export async function Navbar() {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [profile, unreadCount] = user
-    ? await Promise.all([getProfileById(supabase, user.id), getUnreadNotificationCount(supabase, user.id)])
-    : [null, 0];
+  const [profile, unreadCount, gamification] = user
+    ? await Promise.all([
+        getProfileById(supabase, user.id),
+        getUnreadNotificationCount(supabase, user.id),
+        getGamificationProfile(supabase, user.id),
+      ])
+    : [null, 0, null];
 
   const displayName = profile?.fullName || profile?.username || user?.email || "You";
 
@@ -41,6 +47,9 @@ export async function Navbar() {
               <Link href="/swaps" className="text-muted-foreground hover:text-foreground">
                 My Swaps
               </Link>
+              <Link href="/quests" className="text-muted-foreground hover:text-foreground">
+                Quests
+              </Link>
               <Link href="/profile" className="text-muted-foreground hover:text-foreground">
                 My Profile
               </Link>
@@ -51,6 +60,7 @@ export async function Navbar() {
         <div className="flex items-center gap-3">
           {user ? (
             <>
+              {gamification && <HeaderGamificationPill gamification={gamification} />}
               <NotificationBell profileId={user.id} initialUnreadCount={unreadCount} />
               <UserMenu displayName={displayName} avatarUrl={profile?.avatarUrl ?? null} />
             </>
