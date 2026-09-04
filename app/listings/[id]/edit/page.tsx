@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getPhotosForListing } from "@/lib/listing-photos";
 import { ListingForm } from "@/components/listing-form";
+import { ListingGallery } from "@/components/listing-gallery";
 import type { Listing } from "@/types";
 
 interface EditListingPageProps {
@@ -44,6 +46,8 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
     createdAt: data.created_at as string,
   };
 
+  const photos = await getPhotosForListing(supabase, listing.id);
+
   return (
     <div className="container max-w-2xl py-10">
       <div className="mb-8">
@@ -51,6 +55,11 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
         <p className="mt-1 text-muted-foreground">Update the details or swap in a new photo.</p>
       </div>
       <ListingForm mode="edit" userId={user.id} listing={listing} />
+
+      <div className="mt-10 border-t border-border pt-8">
+        <h2 className="mb-3 text-lg font-semibold">Additional photos</h2>
+        <ListingGallery listingId={listing.id} userId={user.id} initialPhotos={photos} />
+      </div>
     </div>
   );
 }

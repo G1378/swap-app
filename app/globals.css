@@ -10,7 +10,11 @@
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
 
-    --primary: 158 64% 40%;
+    /* Brand — coral. This is the one color every user *action* uses:
+     * primary buttons, the swap CTA, active nav state, wishlist. Keeping
+     * it to a single hue (rather than cycling colors per feature) is a
+     * deliberate restraint call — see docs/DESIGN.md. */
+    --primary: 15 68% 52%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96%;
@@ -19,15 +23,26 @@
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 47%;
 
-    --accent: 158 64% 96%;
-    --accent-foreground: 158 64% 25%;
+    /* Neutral on purpose (not a brand tint) — this drives hover/pressed
+     * states across every ghost button, menu item, and badge, so keeping
+     * it gray stops coral from bleeding into places it shouldn't. */
+    --accent: 210 20% 95%;
+    --accent-foreground: 222 47% 11%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 214 32% 91%;
     --input: 214 32% 91%;
-    --ring: 158 64% 40%;
+    --ring: 15 68% 52%;
+
+    /* Reward — amber. Reserved exclusively for the gamification layer
+     * (streak, XP, quests) so it reads as a distinct "game" system next
+     * to coral's "action" system, never as a second brand color. */
+    --reward: 35 78% 41%;
+    --reward-foreground: 0 0% 100%;
+    --reward-soft: 39 76% 92%;
+    --reward-soft-foreground: 32 89% 21%;
 
     --radius: 0.75rem;
   }

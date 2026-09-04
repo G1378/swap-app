@@ -9,12 +9,16 @@ export const metadata: Metadata = {
     "A modern marketplace for swapping unwanted items. List what you have, discover what you want, and let smart matching do the rest.",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body className="flex min-h-screen flex-col antialiased">
         <Navbar />
-        <main className="flex-1">{children}</main>
+        <main className="flex-1 pb-16 sm:pb-0">{children}</main>
         <Footer />
       </body>
     </html>

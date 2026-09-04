@@ -40,6 +40,12 @@ const config: Config = {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        reward: {
+          DEFAULT: "hsl(var(--reward))",
+          foreground: "hsl(var(--reward-foreground))",
+          soft: "hsl(var(--reward-soft))",
+          "soft-foreground": "hsl(var(--reward-soft-foreground))",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",

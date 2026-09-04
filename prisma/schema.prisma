@@ -30,6 +30,7 @@ model Profile {
   notifications  Notification[]
   conversations  ConversationParticipant[]
   messages       Message[]
+  gamification   GamificationProfile?
 
   @@map("profiles")
 }
@@ -54,8 +55,9 @@ model Listing {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  wishedBy       WishlistItem[]
-  swapRequests   SwapRequest[]
+  wishedBy         WishlistItem[]
+  swapRequests     SwapRequest[] @relation("RequestedListing")
+  offeredInSwaps   SwapRequest[] @relation("OfferedListing")
 
   @@index([ownerId])
   @@index([category])
@@ -83,22 +85,30 @@ enum SwapRequestStatus {
 }
 
 model SwapRequest {
-  id           String             @id @default(uuid())
-  listing      Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  listingId    String
-  sender       Profile            @relation("RequestSender", fields: [senderId], references: [id], onDelete: Cascade)
-  senderId     String
-  receiver     Profile            @relation("RequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
-  receiverId   String
-  offeredItem  String?
-  status       SwapRequestStatus  @default(PENDING)
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id                 String             @id @default(uuid())
+  listing            Listing            @relation("RequestedListing", fields: [listingId], references: [id], onDelete: Cascade)
+  listingId          String
+  sender             Profile            @relation("RequestSender", fields: [senderId], references: [id], onDelete: Cascade)
+  senderId           String
+  receiver           Profile            @relation("RequestReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  receiverId         String
+  offeredListing     Listing?           @relation("OfferedListing", fields: [offeredListingId], references: [id], onDelete: SetNull)
+  offeredListingId   String?
+  offeredItem        String?
+  status             SwapRequestStatus  @default(PENDING)
+  senderCompletedAt  DateTime?
+  receiverCompletedAt DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   conversation Conversation?
+  ratings      Rating[]
+  pointsTransactions PointsTransaction[]
 
   @@index([senderId])
   @@index([receiverId])
+  @@index([offeredListingId])
+  @@index([status])
   @@map("swap_requests")
 }
 
@@ -139,15 +149,18 @@ model Message {
 }
 
 model Rating {
-  id        String   @id @default(uuid())
-  author    Profile  @relation("RatingAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  authorId  String
-  subject   Profile  @relation("RatingSubject", fields: [subjectId], references: [id], onDelete: Cascade)
-  subjectId String
-  score     Int      // 1-5
-  comment   String?
-  createdAt DateTime @default(now())
+  id            String       @id @default(uuid())
+  author        Profile      @relation("RatingAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  authorId      String
+  subject       Profile      @relation("RatingSubject", fields: [subjectId], references: [id], onDelete: Cascade)
+  subjectId     String
+  swapRequest   SwapRequest? @relation(fields: [swapRequestId], references: [id], onDelete: SetNull)
+  swapRequestId String?
+  score         Int      // 1-5
+  comment       String?
+  createdAt     DateTime @default(now())
 
+  @@unique([swapRequestId, authorId])
   @@index([subjectId])
   @@map("ratings")
 }
@@ -171,4 +184,178 @@ model Notification {
 
   @@index([profileId])
   @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Lightweight gamification layer (see GAMIFICATION.md for the full design
+// note). A light optional layer on top of the core swap flow — nothing
+// here is purchasable with real money, and nothing here changes the value
+// of a trade. Backing SQL lives in
+// prisma/migrations_manual/0010_gamification_and_cash_removal.sql, since
+// this app's live Supabase database is managed via that manual-migration
+// folder rather than `prisma migrate`; this file documents the intended
+// shape and gives the rest of the app typed models to code against.
+// ---------------------------------------------------------------------------
+
+enum TraderTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+/// One row per profile — created automatically alongside it. XP only ever
+/// goes up and drives level/tier; pointsBalance is a separate, spendable
+/// currency backed by PointsTransaction for auditability.
+model GamificationProfile {
+  id                     String     @id @default(uuid())
+  profile                Profile    @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileId              String     @unique
+  xp                     Int        @default(0)
+  level                  Int        @default(1)
+  tier                   TraderTier @default(BRONZE)
+  pointsBalance          Int        @default(0)
+  currentStreakWeeks     Int        @default(0)
+  longestStreakWeeks     Int        @default(0)
+  /// One-time flag guarding the profile-completion XP bonus — set by
+  /// claim_profile_completion_reward() in
+  /// prisma/migrations_manual/0011_gamification_wiring.sql.
+  profileCompletedBonusAwarded Boolean @default(false)
+  /// Monday (UTC) of the most recent week that counted toward the streak.
+  lastActivityWeekStart  DateTime?  @db.Date
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+
+  pointsTransactions PointsTransaction[]
+  badges             UserBadge[]
+  questProgress      UserQuestProgress[]
+
+  @@map("gamification_profiles")
+}
+
+enum PointsTransactionType {
+  EARN
+  SPEND
+}
+
+/// What caused a points change. Earn reasons are the activity loop (swaps,
+/// streaks, quests, referrals); spend reasons are the redeemable perks in
+/// the points shop; ADJUSTMENT covers manual/support corrections.
+enum PointsTransactionReason {
+  SWAP_COMPLETED
+  STREAK_MILESTONE
+  QUEST_COMPLETED
+  REFERRAL
+  FEATURED_LISTING_BOOST
+  PROFILE_COSMETIC
+  PRIORITY_MATCH
+  CATEGORY_UNLOCK
+  ADJUSTMENT
+}
+
+/// Immutable ledger entry. `pointsBalance` on GamificationProfile should
+/// always equal the running sum of a profile's transactions, so it's
+/// always auditable/reconstructable from history — corrections are new
+/// ADJUSTMENT rows, never edits to an existing row.
+model PointsTransaction {
+  id                    String                   @id @default(uuid())
+  gamificationProfile   GamificationProfile      @relation(fields: [gamificationProfileId], references: [id], onDelete: Cascade)
+  gamificationProfileId String
+  type                  PointsTransactionType
+  reason                PointsTransactionReason
+  /// Always positive; `type` gives the direction.
+  amount                Int
+  /// Running balance immediately after this transaction.
+  balanceAfter          Int
+  relatedSwapRequest    SwapRequest?             @relation(fields: [relatedSwapRequestId], references: [id], onDelete: SetNull)
+  relatedSwapRequestId  String?
+  note                  String?
+  createdAt             DateTime                 @default(now())
+
+  @@index([gamificationProfileId])
+  @@map("points_transactions")
+}
+
+/// Badge catalog (admin-managed reference data), distinct from the ad-hoc
+/// computed ProfileBadge in lib/badges.ts — the two can be reconciled into
+/// one system later, but that's a follow-up, not part of this batch.
+model Badge {
+  id          String   @id @default(uuid())
+  slug        String   @unique
+  label       String
+  description String
+  /// Lucide icon name.
+  icon        String
+  createdAt   DateTime @default(now())
+
+  users UserBadge[]
+
+  @@map("badges")
+}
+
+/// A badge a specific user has actually earned.
+model UserBadge {
+  id                    String              @id @default(uuid())
+  gamificationProfile   GamificationProfile @relation(fields: [gamificationProfileId], references: [id], onDelete: Cascade)
+  gamificationProfileId String
+  badge                 Badge               @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  badgeId               String
+  earnedAt              DateTime            @default(now())
+
+  @@unique([gamificationProfileId, badgeId])
+  @@map("user_badges")
+}
+
+enum QuestCadence {
+  WEEKLY
+  SEASONAL
+}
+
+/// Quest catalog (the definition), not an individual user's progress on it
+/// — see UserQuestProgress for that.
+model Quest {
+  id           String       @id @default(uuid())
+  slug         String       @unique
+  title        String
+  description  String
+  cadence      QuestCadence @default(WEEKLY)
+  /// Optional launch-category tie-in for seasonal quests (e.g. "Gaming").
+  /// Free-text, matching LISTING_CATEGORIES in lib/constants.ts — no FK
+  /// since categories aren't their own table.
+  category     String?
+  xpReward     Int          @default(0)
+  pointsReward Int          @default(0)
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+
+  progress UserQuestProgress[]
+
+  @@map("quests")
+}
+
+enum QuestProgressStatus {
+  IN_PROGRESS
+  COMPLETED
+}
+
+/// One user's progress on one instance of a quest. `periodStart` is what
+/// lets the same quest rotate back in a later week/season as a fresh row,
+/// instead of needing a new Quest catalog entry every time.
+model UserQuestProgress {
+  id                     String               @id @default(uuid())
+  gamificationProfile    GamificationProfile  @relation(fields: [gamificationProfileId], references: [id], onDelete: Cascade)
+  gamificationProfileId  String
+  quest                  Quest                @relation(fields: [questId], references: [id], onDelete: Cascade)
+  questId                String
+  status                 QuestProgressStatus  @default(IN_PROGRESS)
+  progressCount          Int                  @default(0)
+  targetCount            Int                  @default(1)
+  /// Start (Monday, UTC) of the week/season this instance belongs to.
+  periodStart            DateTime             @db.Date
+  completedAt            DateTime?
+  createdAt              DateTime             @default(now())
+
+  @@unique([gamificationProfileId, questId, periodStart])
+  @@index([gamificationProfileId])
+  @@map("user_quest_progress")
 }
