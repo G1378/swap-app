@@ -1,0 +1,139 @@
+// Prisma schema for Local Item Swap App - Phase 1
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum ItemCondition {
+  new
+  good
+  worn
+}
+
+enum SwapStatus {
+  pending
+  accepted
+  rejected
+}
+
+enum SwapItemType {
+  offered
+  requested
+}
+
+// NextAuth required models
+model Account {
+  id                String  @id @default(uuid()) @db.Uuid
+  userId            String  @db.Uuid
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique
+  userId       String   @db.Uuid
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// Application models
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String?
+  email        String   @unique
+  emailVerified DateTime?
+  image        String?
+  avatar_url   String?
+  bio          String?
+  location_lat Float?
+  location_lng Float?
+  created_at   DateTime @default(now())
+
+  // NextAuth relations
+  accounts Account[]
+  sessions Session[]
+
+  // App relations
+  items         Item[]
+  swapRequests  SwapRequest[]
+
+  @@index([email])
+  @@index([created_at])
+}
+
+model Item {
+  id           String        @id @default(uuid()) @db.Uuid
+  user_id      String        @db.Uuid
+  title        String
+  description  String        @db.Text
+  category     String
+  condition    ItemCondition @default(good)
+  is_available Boolean       @default(true)
+  created_at   DateTime      @default(now())
+
+  user      User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  swapItems SwapItem[]
+
+  @@index([user_id])
+  @@index([category])
+  @@index([condition])
+  @@index([is_available])
+  @@index([created_at])
+}
+
+model SwapRequest {
+  id           String     @id @default(uuid()) @db.Uuid
+  requester_id String     @db.Uuid
+  status       SwapStatus @default(pending)
+  created_at   DateTime   @default(now())
+
+  requester User       @relation(fields: [requester_id], references: [id], onDelete: Cascade)
+  swapItems SwapItem[]
+
+  @@index([requester_id])
+  @@index([status])
+  @@index([created_at])
+}
+
+model SwapItem {
+  id              String       @id @default(uuid()) @db.Uuid
+  swap_request_id String       @db.Uuid
+  item_id         String       @db.Uuid
+  type            SwapItemType
+
+  swapRequest SwapRequest @relation(fields: [swap_request_id], references: [id], onDelete: Cascade)
+  item        Item        @relation(fields: [item_id], references: [id], onDelete: Cascade)
+
+  @@index([swap_request_id])
+  @@index([item_id])
+}
