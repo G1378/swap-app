@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, PackageOpen } from "lucide-react";
+import { ChevronDown, ChevronUp, PackageOpen, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { REEL_GESTURE } from "@/lib/constants";
 import { Dialog } from "@/components/ui/dialog";
@@ -400,6 +400,14 @@ export function DiscoverReel({
               </div>
             );
           })}
+
+          <Link
+            href="/search"
+            aria-label="Search listings"
+            className="pointer-events-auto absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/50"
+          >
+            <Search className="h-4 w-4" />
+          </Link>
 
           <StreakXpBar
             gamification={gamification}

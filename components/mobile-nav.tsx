@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Plus, Search, User, ArrowRightLeft } from "lucide-react";
+import { Home, Plus, Store, User, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MobileNavProps {
@@ -29,10 +29,12 @@ interface Tab {
  * below that breakpoint this is the only navigation surface, so every
  * top-level destination needs a tab here.
  *
- * Logged-out visitors still get the bar (Discover and Search are public),
- * but the create/swaps/profile tabs route to /login instead of their
- * signed-in destination — mirrors the same gate DiscoverReel already uses
- * when a logged-out user tries to swipe right.
+ * Logged-out visitors still get the bar — Discover is public — but
+ * shop/create/swaps/profile all route to /login instead of their signed-in
+ * destination, mirroring the same gate DiscoverReel already uses when a
+ * logged-out user tries to swipe right. Search isn't a tab here on
+ * purpose: it lives as an icon on the Discover feed itself (top right),
+ * since it's a feed-scoped action rather than a top-level destination.
  */
 export function MobileNav({ isLoggedIn, unreadCount }: MobileNavProps) {
   const pathname = usePathname();
@@ -46,11 +48,11 @@ export function MobileNav({ isLoggedIn, unreadCount }: MobileNavProps) {
       isActive: (p) => p === "/discover",
     },
     {
-      key: "search",
-      label: "Search",
-      href: "/search",
-      icon: Search,
-      isActive: (p) => p.startsWith("/search") || p.startsWith("/discover/"),
+      key: "shop",
+      label: "Shop",
+      href: isLoggedIn ? "/shop" : "/login",
+      icon: Store,
+      isActive: (p) => p.startsWith("/shop"),
     },
     {
       key: "create",

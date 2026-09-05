@@ -34,7 +34,9 @@ export function StreakXpBar({ gamification, index, total }: StreakXpBarProps) {
       </span>
 
       {gamification && progress && (
-        <div className="pointer-events-auto flex flex-col items-end gap-1.5">
+        // mt-11 clears DiscoverReel's search button (h-9, top-4) sitting
+        // in this same top-right corner, one layer up.
+        <div className="pointer-events-auto mt-11 flex flex-col items-end gap-1.5">
           <div className="flex items-center gap-2">
             {gamification.currentStreakWeeks > 0 && (
               <span
