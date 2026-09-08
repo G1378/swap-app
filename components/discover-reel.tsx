@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { SwapRequestDialog } from "@/components/swap-request-dialog";
 import { ReelCard } from "@/components/reel-card";
 import { StreakXpBar } from "@/components/gamification/streak-xp-bar";
+import { SearchOverlay } from "@/components/search-overlay";
 import type { GamificationProfile, Listing, Profile } from "@/types";
 
 interface DiscoverReelProps {
@@ -80,6 +81,7 @@ export function DiscoverReel({
   } | null>(null);
 
   const [index, setIndex] = useState(0);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [drag, setDrag] = useState({ x: 0, y: 0 });
   const [axis, setAxis] = useState<"x" | "y" | null>(null);
   const [isSettling, setIsSettling] = useState(false);
@@ -401,13 +403,14 @@ export function DiscoverReel({
             );
           })}
 
-          <Link
-            href="/search"
-            aria-label="Search listings"
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search listings or members"
             className="pointer-events-auto absolute right-4 top-4 z-20 flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur hover:bg-black/50"
           >
             <Search className="h-4 w-4" />
-          </Link>
+          </button>
 
           <StreakXpBar
             gamification={gamification}
@@ -496,6 +499,16 @@ export function DiscoverReel({
           )}
         </Dialog>
       )}
+      <SearchOverlay
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        listings={listings}
+        currentUserId={currentUserId}
+        onSelectListing={(listingId) => {
+          const found = listings.findIndex((l) => l.id === listingId);
+          if (found !== -1) setIndex(found);
+        }}
+      />
     </div>
   );
 }
