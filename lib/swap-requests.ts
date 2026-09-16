@@ -2,7 +2,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { mapListingRow, mapProfileRow, mapSwapRequestRow } from "@/lib/mappers";
 import type { Listing, SwapRequest, SwapRequestWithDetails } from "@/types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
 interface CreateSwapRequestInput {

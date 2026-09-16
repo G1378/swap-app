@@ -66,7 +66,6 @@ export async function getProfileRatingSummary(
 
 // --- Appended for profile redesign ---------------------------------------
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
 /**

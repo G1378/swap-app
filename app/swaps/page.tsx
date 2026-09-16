@@ -27,7 +27,7 @@ export default async function SwapsPage() {
     <div className="container max-w-3xl py-10">
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">My swaps</h1>
-        <p className="mt-1 text-muted-foreground">Requests you've sent and received, all in one place.</p>
+        <p className="mt-1 text-muted-foreground">Requests you&apos;ve sent and received, all in one place.</p>
       </div>
       <SwapsList swapRequests={swapRequests} currentUserId={user.id} unreadCounts={unreadCounts} />
     </div>

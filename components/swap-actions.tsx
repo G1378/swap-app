@@ -183,7 +183,7 @@ export function SwapActions({
         myCompletedAt &&
         !otherCompletedAt && (
           <p className="text-sm text-muted-foreground">
-            You've confirmed your side. Waiting on the other person to confirm
+            You&apos;ve confirmed your side. Waiting on the other person to confirm
             theirs.
           </p>
         )}

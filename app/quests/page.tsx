@@ -34,7 +34,7 @@ export default async function QuestsPage() {
 
       {!gamification ? (
         <p className="text-sm text-muted-foreground">
-          Your quest board isn't ready yet — check back in a moment.
+          Your quest board isn&apos;t ready yet — check back in a moment.
         </p>
       ) : (
         <div className="flex flex-col gap-8">

@@ -6,7 +6,6 @@ import {
 } from "@/lib/mappers";
 import type { GamificationProfile, UserBadgeWithBadge, UserQuestProgressWithQuest } from "@/types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
 /**

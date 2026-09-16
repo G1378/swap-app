@@ -21,7 +21,6 @@ import type {
  * component that touches the database.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
 export function mapListingRow(row: Row): Listing {

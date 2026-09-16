@@ -56,11 +56,10 @@ components — categories where trading is already common.
 | Script             | Description                                   |
 | ------------------ | ---------------------------------------------- |
 | `npm run dev`       | Start the Next.js dev server                   |
-| `npm run build`     | `prisma generate && next build` — production build |
+| `npm run build`     | Production build                                  |
 | `npm run start`     | Serve the production build                     |
 | `npm run lint`      | Run `next lint`                                |
 | `npm run db:generate` | Regenerate the Prisma client                 |
-| `npm run db:migrate`  | Run Prisma migrations (dev)                  |
 | `npm run db:studio`   | Open Prisma Studio                           |
 
 ## Project structure

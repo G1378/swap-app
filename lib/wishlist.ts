@@ -3,7 +3,6 @@ import { mapListingRow } from "@/lib/mappers";
 import { bumpQuestProgress } from "@/lib/gamification/queries";
 import type { WishlistEntry } from "@/types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
 
 /** Full wishlist for a profile, each entry joined with its listing. Only
