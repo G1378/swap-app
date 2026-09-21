@@ -64,11 +64,12 @@ export function mapProfileRow(row: Row): Profile {
 export function mapSwapRequestRow(row: Row): SwapRequest {
   return {
     id: row.id,
-    listingId: row.listing_id,
     senderId: row.sender_id,
     receiverId: row.receiver_id,
     parentRequestId: row.parent_request_id ?? null,
     status: row.status,
+    offeredPoints: row.offered_points ?? 0,
+    requestedPoints: row.requested_points ?? 0,
     senderCompletedAt: row.sender_completed_at ?? null,
     receiverCompletedAt: row.receiver_completed_at ?? null,
     createdAt: row.created_at,

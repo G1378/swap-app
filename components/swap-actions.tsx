@@ -20,8 +20,14 @@ interface SwapActionsProps {
   role: "sender" | "receiver";
   currentUserId: string;
   /** The current viewer's own available listings, needed if they want to
-   * counter (they pick from their own items, same as the original offer). */
+   * propose new terms (what they'd offer). */
   myListings: Listing[];
+  /** The other participant's available listings, needed if the current
+   * viewer wants to propose new terms (what they'd request — a counter
+   * can now ask for more than one specific item back). */
+  otherPartyListings: Listing[];
+  myPointsBalance?: number;
+  otherPartyPointsBalance?: number;
 }
 
 export function SwapActions({
@@ -29,6 +35,9 @@ export function SwapActions({
   role,
   currentUserId,
   myListings,
+  otherPartyListings,
+  myPointsBalance,
+  otherPartyPointsBalance,
 }: SwapActionsProps) {
   const router = useRouter();
   const supabase = createClient();
@@ -73,14 +82,12 @@ export function SwapActions({
     return (
       <div className="flex flex-col gap-2">
         <p className="text-sm text-muted-foreground">
-          {role === "receiver"
-            ? "You proposed new terms for this swap."
-            : "They proposed new terms for this swap."}
+          New terms were proposed for this swap.
         </p>
         {swapRequest.counteredByRequestId && (
           <Link href={`/swaps/${swapRequest.counteredByRequestId}`}>
             <Button size="sm" variant="outline" className="gap-2">
-              View the counter-offer
+              View the new terms
             </Button>
           </Link>
         )}
@@ -109,17 +116,6 @@ export function SwapActions({
               )}
               Accept
             </Button>
-            {myListings.length > 0 && (
-              <Button
-                variant="outline"
-                className="gap-2"
-                disabled={loading !== null}
-                onClick={() => setCounterOpen(true)}
-              >
-                <MessageSquareDiff className="h-4 w-4" />
-                Counter offer
-              </Button>
-            )}
             <Button
               variant="outline"
               className="gap-2"
@@ -138,6 +134,18 @@ export function SwapActions({
               Decline
             </Button>
           </>
+        )}
+
+        {swapRequest.status === "pending" && myListings.length > 0 && (
+          <Button
+            variant="outline"
+            className="gap-2"
+            disabled={loading !== null}
+            onClick={() => setCounterOpen(true)}
+          >
+            <MessageSquareDiff className="h-4 w-4" />
+            Propose new terms
+          </Button>
         )}
 
         {(swapRequest.status === "pending" ||
@@ -190,13 +198,16 @@ export function SwapActions({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      {swapRequest.status === "pending" && role === "receiver" && (
+      {swapRequest.status === "pending" && (
         <CounterOfferDialog
           open={counterOpen}
           onClose={() => setCounterOpen(false)}
           parentRequest={swapRequest}
           currentUserId={currentUserId}
           myListings={myListings}
+          otherPartyListings={otherPartyListings}
+          myPointsBalance={myPointsBalance}
+          otherPartyPointsBalance={otherPartyPointsBalance}
         />
       )}
 
@@ -212,7 +223,9 @@ export function SwapActions({
           you={{
             name: "You",
             avatarUrl: swapRequest.receiver?.avatarUrl ?? null,
-            itemTitle: swapRequest.listing?.title ?? "your item",
+            itemTitle:
+              swapRequest.requestedListings.map((l) => l.title).join(", ") ||
+              "your item",
           }}
           others={[
             {

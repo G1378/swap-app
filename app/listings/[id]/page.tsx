@@ -7,6 +7,7 @@ import { findActiveSwapRequest } from "@/lib/swap-requests";
 import { getProfileRatingSummary } from "@/lib/ratings";
 import { getPhotosForListing } from "@/lib/listing-photos";
 import { isBlocked } from "@/lib/blocks";
+import { getGamificationProfile } from "@/lib/gamification/queries";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { ListingSwapAction } from "@/components/listing-swap-action";
@@ -41,11 +42,12 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
   const isOwner = user?.id === listing.ownerId;
 
   let myListings: Listing[] = [];
+  let myPointsBalance = 0;
   let activeSwapRequestId: string | null = null;
   let isBlockedFromOwner = false;
 
   if (user && !isOwner) {
-    const [{ data: myListingRows }, activeRequest, blocked] = await Promise.all([
+    const [{ data: myListingRows }, activeRequest, blocked, myGamificationProfile] = await Promise.all([
       supabase
         .from("listings")
         .select("*")
@@ -54,11 +56,13 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
         .order("created_at", { ascending: false }),
       findActiveSwapRequest(supabase, listing.id, user.id),
       isBlocked(supabase, user.id, listing.ownerId),
+      getGamificationProfile(supabase, user.id),
     ]);
 
     myListings = (myListingRows ?? []).map(mapListingRow);
     activeSwapRequestId = activeRequest?.id ?? null;
     isBlockedFromOwner = blocked;
+    myPointsBalance = myGamificationProfile?.pointsBalance ?? 0;
   }
 
   return (
@@ -131,6 +135,7 @@ export default async function ListingDetailPage({ params }: ListingDetailPagePro
                 listing={listing}
                 currentUserId={user?.id ?? null}
                 myListings={myListings}
+                myPointsBalance={myPointsBalance}
               />
             )}
           </div>

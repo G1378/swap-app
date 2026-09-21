@@ -11,9 +11,12 @@ interface ListingSwapActionProps {
   listing: Listing;
   currentUserId: string | null;
   myListings: Listing[];
+  /** The current user's spendable points balance, threaded down to the
+   * dialog's optional "add points to your offer" field. */
+  myPointsBalance?: number;
 }
 
-export function ListingSwapAction({ listing, currentUserId, myListings }: ListingSwapActionProps) {
+export function ListingSwapAction({ listing, currentUserId, myListings, myPointsBalance }: ListingSwapActionProps) {
   const [open, setOpen] = useState(false);
 
   if (!currentUserId) {
@@ -57,8 +60,8 @@ export function ListingSwapAction({ listing, currentUserId, myListings }: Listin
         open={open}
         onClose={() => setOpen(false)}
         listing={listing}
-        senderId={currentUserId}
         myListings={myListings}
+        myPointsBalance={myPointsBalance}
       />
     </>
   );

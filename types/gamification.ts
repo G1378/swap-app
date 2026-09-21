@@ -53,7 +53,13 @@ export type PointsTransactionType = "earn" | "spend";
 /** What caused a points change. Mirrors the `points_transactions.reason`
  * check constraint. Earn reasons are the activity loop (swaps, streaks,
  * quests, referrals); spend reasons are the redeemable perks in the points
- * shop. `adjustment` covers manual/support corrections in either direction. */
+ * shop. `adjustment` covers manual/support corrections in either direction.
+ * `swap_points_trade` is different from all of these — it's not new points
+ * entering or leaving the system, just an existing balance moving between
+ * two users as the points portion of a completed swap (see
+ * `swap_requests.offered_points` / `requested_points`). It always appears
+ * in pairs: one `spend` row for whoever added points to their side of the
+ * deal, one `earn` row for whoever received them. */
 export type PointsTransactionReason =
   | "swap_completed"
   | "streak_milestone"
@@ -63,7 +69,8 @@ export type PointsTransactionReason =
   | "profile_cosmetic"
   | "priority_match"
   | "category_unlock"
-  | "adjustment";
+  | "adjustment"
+  | "swap_points_trade";
 
 /**
  * One entry in the points ledger. Rows are immutable once written —

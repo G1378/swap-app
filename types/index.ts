@@ -40,23 +40,31 @@ export type SwapRequestStatus = "pending" | "accepted" | "declined" | "cancelled
 
 export interface SwapRequest {
   id: string;
-  listingId: string;
   senderId: string;
   receiverId: string;
   /** Set when this row is a counter-offer replying to an earlier request. */
   parentRequestId: string | null;
   status: SwapRequestStatus;
+  /** Points the sender of this round added on top of their offered bundle. */
+  offeredPoints: number;
+  /** Points the sender of this round asked the receiver to add on top of
+   * the requested bundle. */
+  requestedPoints: number;
   senderCompletedAt: string | null;
   receiverCompletedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-/** A SwapRequest joined with the records a detail/list view needs to render. */
+/** A SwapRequest joined with the records a detail/list view needs to render.
+ * Both sides of the trade are bundles now — a counter-offer can ask for (or
+ * offer) more than one listing at once, not just the original single item. */
 export interface SwapRequestWithDetails extends SwapRequest {
-  listing: Listing | null;
-  /** The sender's offered bundle — one or more listings. */
+  /** The sender's offered bundle — one or more listings, plus offeredPoints. */
   offeredListings: Listing[];
+  /** What the sender is asking the receiver for — one or more listings,
+   * plus requestedPoints. */
+  requestedListings: Listing[];
   sender: Profile | null;
   receiver: Profile | null;
   conversationId: string | null;

@@ -8,6 +8,7 @@ import { getMyRatingForSwap } from "@/lib/ratings";
 import {
   bumpQuestProgress,
   claimSwapCompletionReward,
+  getGamificationProfilesByProfileIds,
 } from "@/lib/gamification/queries";
 import { SwapStatusBadge } from "@/components/swap-status-badge";
 import { SwapActions } from "@/components/swap-actions";
@@ -55,7 +56,7 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
     await bumpQuestProgress(supabase, "complete-a-swap");
   }
 
-  const [myRating, { data: myListingRows }] = await Promise.all([
+  const [myRating, { data: myListingRows }, { data: otherListingRows }, pointsByProfileId] = await Promise.all([
     swapRequest.status === "completed"
       ? getMyRatingForSwap(supabase, swapRequest.id, user.id)
       : Promise.resolve(null),
@@ -65,11 +66,36 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
       .eq("owner_id", user.id)
       .eq("status", "available")
       .order("created_at", { ascending: false }),
+    // Only needed while there's still something to negotiate — no point
+    // fetching the other party's whole catalog once the swap is settled.
+    swapRequest.status === "pending"
+      ? supabase
+          .from("listings")
+          .select("*")
+          .eq("owner_id", otherUserId)
+          .eq("status", "available")
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] as Record<string, unknown>[] }),
+    getGamificationProfilesByProfileIds(supabase, [user.id, otherUserId]),
   ]);
 
   const myListings: Listing[] = (myListingRows ?? []).map(mapListingRow);
+  const otherPartyListings: Listing[] = (otherListingRows ?? []).map(mapListingRow);
+  const myPointsBalance = pointsByProfileId.get(user.id)?.pointsBalance ?? 0;
+  const otherPartyPointsBalance = pointsByProfileId.get(otherUserId)?.pointsBalance ?? 0;
   const otherDisplayName =
     otherProfile?.fullName || otherProfile?.username || "another swapper";
+
+  // Which bundle/points belong to "you" vs "them" depends on which role
+  // you played in this particular round — the sender always owns
+  // offeredListings/offeredPoints, the receiver's side is always
+  // requestedListings/requestedPoints.
+  const yourBundle = role === "sender"
+    ? { listings: swapRequest.offeredListings, points: swapRequest.offeredPoints }
+    : { listings: swapRequest.requestedListings, points: swapRequest.requestedPoints };
+  const theirBundle = role === "sender"
+    ? { listings: swapRequest.requestedListings, points: swapRequest.requestedPoints }
+    : { listings: swapRequest.offeredListings, points: swapRequest.offeredPoints };
 
   return (
     <div className="container max-w-3xl py-10">
@@ -104,15 +130,9 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
 
       {/* Item comparison */}
       <div className="mb-8 grid grid-cols-1 items-start gap-4 sm:grid-cols-[1fr_auto_1fr]">
-        <OfferedBundleSummary
-          label={role === "sender" ? "You offered" : "They offered"}
-          listings={swapRequest.offeredListings}
-        />
+        <OfferedBundleSummary label="You offered" listings={yourBundle.listings} points={yourBundle.points} />
         <ArrowRightLeft className="mx-auto mt-4 h-5 w-5 shrink-0 text-muted-foreground" />
-        <OfferedBundleSummary
-          label={role === "sender" ? "For their" : "For your"}
-          listings={swapRequest.listing ? [swapRequest.listing] : []}
-        />
+        <OfferedBundleSummary label="In exchange for" listings={theirBundle.listings} points={theirBundle.points} />
       </div>
 
       {/* Actions */}
@@ -122,6 +142,9 @@ export default async function SwapDetailPage({ params }: SwapDetailPageProps) {
           role={role}
           currentUserId={user.id}
           myListings={myListings}
+          otherPartyListings={otherPartyListings}
+          myPointsBalance={myPointsBalance}
+          otherPartyPointsBalance={otherPartyPointsBalance}
         />
       </div>
 

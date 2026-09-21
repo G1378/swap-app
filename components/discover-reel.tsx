@@ -446,8 +446,8 @@ export function DiscoverReel({
           open
           onClose={() => setSwapListing(null)}
           listing={swapListing}
-          senderId={currentUserId}
           myListings={myListings}
+          myPointsBalance={gamification?.pointsBalance}
         />
       )}
 

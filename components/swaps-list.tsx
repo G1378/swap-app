@@ -16,6 +16,15 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "history", label: "History" },
 ];
 
+/** Turns a bundle (plus any points riding along with it) into one short
+ * phrase, e.g. "Camera + 2 more + 20 pts". Used for both sides of the
+ * trade in the list row — either can now hold more than one item. */
+function describeBundle(items: Listing[], points: number): string {
+  const itemsPart =
+    items.length === 0 ? "an item" : items.length === 1 ? items[0].title : `${items[0].title} + ${items.length - 1} more`;
+  return points > 0 ? `${itemsPart} + ${points} pts` : itemsPart;
+}
+
 export function SwapsList({
   swapRequests,
   currentUserId,
@@ -71,16 +80,16 @@ export function SwapsList({
           {shown.map((sr) => {
             const isSender = sr.senderId === currentUserId;
             const otherProfile = isSender ? sr.receiver : sr.sender;
-            const theirItem = sr.listing;
-            const yourItems = sr.offeredListings;
             const unread = sr.conversationId ? unreadCounts[sr.conversationId] ?? 0 : 0;
 
-            const bundleLabel =
-              yourItems.length === 0
-                ? "an item"
-                : yourItems.length === 1
-                  ? yourItems[0].title
-                  : `${yourItems[0].title} + ${yourItems.length - 1} more`;
+            // offeredListings/offeredPoints always belong to whoever sent
+            // this round; requestedListings/requestedPoints to whoever
+            // received it — map those onto "your side" vs "their side"
+            // for the current viewer.
+            const yourItems = isSender ? sr.offeredListings : sr.requestedListings;
+            const yourPoints = isSender ? sr.offeredPoints : sr.requestedPoints;
+            const theirItems = isSender ? sr.requestedListings : sr.offeredListings;
+            const theirPoints = isSender ? sr.requestedPoints : sr.offeredPoints;
 
             return (
               <li key={sr.id}>
@@ -88,13 +97,14 @@ export function SwapsList({
                   href={`/swaps/${sr.id}`}
                   className="flex items-center gap-4 rounded-xl border border-border p-4 transition-colors hover:bg-accent/50"
                 >
-                  <MiniThumbStack listings={isSender ? (theirItem ? [theirItem] : []) : yourItems} />
+                  <MiniThumbStack listings={theirItems} />
                   <ArrowRightLeft className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  <MiniThumbStack listings={isSender ? yourItems : theirItem ? [theirItem] : []} />
+                  <MiniThumbStack listings={yourItems} />
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">
-                      {isSender ? "You offered" : "They offered"} {bundleLabel} for {theirItem?.title ?? "an item"}
+                      {isSender ? "You offered" : "They offered"} {describeBundle(yourItems, yourPoints)} for{" "}
+                      {describeBundle(theirItems, theirPoints)}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">
                       {isSender ? "To" : "From"} {otherProfile?.fullName || otherProfile?.username || "a swapper"}

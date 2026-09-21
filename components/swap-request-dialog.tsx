@@ -10,21 +10,26 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { OfferBuilder } from "@/components/offer-builder";
+import { PointsInput } from "@/components/points-input";
 import type { Listing } from "@/types";
 
 interface SwapRequestDialogProps {
   open: boolean;
   onClose: () => void;
   listing: Listing;
-  senderId: string;
   myListings: Listing[];
+  /** The current user's spendable points balance, for the optional
+   * top-up field. Omit (or pass 0) if it isn't known — the field still
+   * renders, just without a visible ceiling. */
+  myPointsBalance?: number;
 }
 
-export function SwapRequestDialog({ open, onClose, listing, senderId, myListings }: SwapRequestDialogProps) {
+export function SwapRequestDialog({ open, onClose, listing, myListings, myPointsBalance }: SwapRequestDialogProps) {
   const router = useRouter();
   const supabase = createClient();
 
   const [selectedIds, setSelectedIds] = useState<string[]>(myListings[0] ? [myListings[0].id] : []);
+  const [offeredPoints, setOfferedPoints] = useState(0);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,14 +49,14 @@ export function SwapRequestDialog({ open, onClose, listing, senderId, myListings
     setError(null);
 
     try {
-      const swapRequest = await createSwapRequest(supabase, {
-        listingId: listing.id,
-        senderId,
+      const swapRequestId = await createSwapRequest(supabase, {
         receiverId: listing.ownerId,
+        requestedListingIds: [listing.id],
         offeredListingIds: selectedIds,
+        offeredPoints,
         note,
       });
-      router.push(`/swaps/${swapRequest.id}`);
+      router.push(`/swaps/${swapRequestId}`);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
@@ -67,7 +72,15 @@ export function SwapRequestDialog({ open, onClose, listing, senderId, myListings
       description="Pick one or more of your own items to offer in return."
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <OfferBuilder myListings={myListings} selectedIds={selectedIds} onToggle={toggleSelected} />
+        <OfferBuilder listings={myListings} selectedIds={selectedIds} onToggle={toggleSelected} />
+
+        <PointsInput
+          id="offered-points"
+          label="Add points to your offer"
+          value={offeredPoints}
+          onChange={setOfferedPoints}
+          maxAvailable={myPointsBalance}
+        />
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="note">Message (optional)</Label>
