@@ -21,6 +21,11 @@ export async function createSwapRequest(
     throw new Error("Choose at least one item to offer.");
   }
 
+  // Avoid creating a second negotiation when a stale dialog or a quick
+  // double-submit races with the database's active-request unique index.
+  const existing = await findActiveSwapRequest(supabase, input.listingId, input.senderId);
+  if (existing) return existing;
+
   const { data, error } = await supabase
     .from("swap_requests")
     .insert({
@@ -30,6 +35,15 @@ export async function createSwapRequest(
     })
     .select("*")
     .single();
+
+  if (error?.code === "23505") {
+    // The preflight above cannot eliminate a concurrent submission. Resolve
+    // that race by opening the request that won instead of showing a raw
+    // Postgres constraint error to the user.
+    const activeRequest = await findActiveSwapRequest(supabase, input.listingId, input.senderId);
+    if (activeRequest) return activeRequest;
+    throw new Error("You already have an active swap request for this listing.");
+  }
 
   if (error || !data) {
     throw new Error(error?.message ?? "Failed to create swap request.");
