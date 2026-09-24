@@ -7,21 +7,25 @@ import { PackageOpen, Search, Users, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { listProfiles } from "@/lib/profiles";
 import { getBlockedEitherDirection } from "@/lib/blocks";
+import { searchAvailableListings } from "@/lib/feed/search";
 import { Avatar } from "@/components/ui/avatar";
 import type { Listing, Profile } from "@/types";
+
+/** Debounce before a listing/member search actually fires, so fast typing
+ * doesn't send a request per keystroke. */
+const SEARCH_DEBOUNCE_MS = 300;
 
 interface SearchOverlayProps {
   open: boolean;
   onClose: () => void;
-  /** The reel's full listing set — already the complete "available"
-   * result set (see app/discover/page.tsx), so filtering it client-side
-   * is a real search, not just a search of whatever's currently on
-   * screen. */
-  listings: Listing[];
   currentUserId: string | null;
-  /** Jumps the reel to this card instead of navigating to a listing page —
-   * search is meant to stay inside the feed, not send you somewhere else. */
-  onSelectListing: (listingId: string) => void;
+  /** The listing the person picked. The reel jumps to it if it's already
+   * loaded, or fetches its owner/swap-request state and splices it into
+   * the feed if not — see DiscoverReel's revealSearchResult. Passing the
+   * full listing (not just an id) is what makes that possible: search
+   * results can come from anywhere in the catalogue, not only what the
+   * reel has loaded so far. */
+  onSelectListing: (listing: Listing) => void;
 }
 
 /**
@@ -35,22 +39,29 @@ interface SearchOverlayProps {
  * elsewhere. No category filters here on purpose — this is meant to be
  * fast free-text search, not another place to browse by category (that
  * still exists at /discover/[category] for anyone who wants it).
+ *
+ * Listing search queries the database (see lib/feed/search.ts) rather than
+ * filtering the reel's own listing array: the reel only ever holds a
+ * loaded subset of the catalogue (it's paginated — see
+ * hooks/use-discover-feed.ts), so a client-side filter would silently miss
+ * most listings.
  */
 export function SearchOverlay({
   open,
   onClose,
-  listings,
   currentUserId,
   onSelectListing,
 }: SearchOverlayProps) {
   const router = useRouter();
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [query, setQuery] = useState("");
   const [members, setMembers] = useState<Profile[] | null>(null);
   const [blockedIds, setBlockedIds] = useState<Set<string>>(new Set());
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [listingResults, setListingResults] = useState<Listing[]>([]);
+  const [loadingListings, setLoadingListings] = useState(false);
 
   const isMemberMode = query.trim().startsWith("@");
 
@@ -59,6 +70,7 @@ export function SearchOverlay({
       inputRef.current?.focus();
     } else {
       setQuery("");
+      setListingResults([]);
     }
   }, [open]);
 
@@ -71,31 +83,65 @@ export function SearchOverlay({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open, onClose]);
 
+  // Blocks apply to both search modes (hide their listings, hide their
+  // profile), so this loads once per time the overlay opens rather than
+  // being tied to member mode specifically.
+  useEffect(() => {
+    if (!open || !currentUserId) return;
+    let cancelled = false;
+    getBlockedEitherDirection(supabase, currentUserId).then((blocked) => {
+      if (!cancelled) setBlockedIds(blocked);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, currentUserId, supabase]);
+
   // Lazily loads the member directory the first time "@" mode is entered
   // (once per mount — most searches here will be for listings, so there's
   // no reason to fetch every profile on every Discover visit).
   useEffect(() => {
     if (!isMemberMode || members !== null || loadingMembers) return;
     setLoadingMembers(true);
-    Promise.all([
-      listProfiles(supabase),
-      currentUserId
-        ? getBlockedEitherDirection(supabase, currentUserId)
-        : Promise.resolve(new Set<string>()),
-    ]).then(([profiles, blocked]) => {
+    listProfiles(supabase).then((profiles) => {
       setMembers(profiles);
-      setBlockedIds(blocked);
       setLoadingMembers(false);
     });
-  }, [isMemberMode, members, loadingMembers, supabase, currentUserId]);
+  }, [isMemberMode, members, loadingMembers, supabase]);
 
-  const listingResults = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (isMemberMode || !q) return [];
-    return listings
-      .filter((l) => l.title.toLowerCase().includes(q))
-      .slice(0, 30);
-  }, [listings, query, isMemberMode]);
+  // Debounced listing search against the database.
+  useEffect(() => {
+    if (isMemberMode) {
+      setListingResults([]);
+      return;
+    }
+    const q = query.trim();
+    if (!q) {
+      setListingResults([]);
+      setLoadingListings(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingListings(true);
+    const timer = window.setTimeout(() => {
+      searchAvailableListings(supabase, {
+        query: q,
+        viewerId: currentUserId,
+        excludeOwnerIds: blockedIds,
+        limit: 30,
+      }).then((results) => {
+        if (cancelled) return;
+        setListingResults(results);
+        setLoadingListings(false);
+      });
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [query, isMemberMode, supabase, currentUserId, blockedIds]);
 
   const memberResults = useMemo(() => {
     if (!isMemberMode || !members) return [];
@@ -187,12 +233,19 @@ export function SearchOverlay({
             </button>
           ))}
 
-        {!isMemberMode && query.trim() && listingResults.length === 0 && (
-          <div className="flex flex-col items-center gap-2 pt-10 text-center text-white/50">
-            <PackageOpen className="h-6 w-6" />
-            <p className="text-sm">No listings found.</p>
-          </div>
+        {!isMemberMode && query.trim() && loadingListings && listingResults.length === 0 && (
+          <p className="pt-10 text-center text-sm text-white/50">Searching…</p>
         )}
+
+        {!isMemberMode &&
+          query.trim() &&
+          !loadingListings &&
+          listingResults.length === 0 && (
+            <div className="flex flex-col items-center gap-2 pt-10 text-center text-white/50">
+              <PackageOpen className="h-6 w-6" />
+              <p className="text-sm">No listings found.</p>
+            </div>
+          )}
 
         {!isMemberMode &&
           listingResults.map((listing) => (
@@ -200,7 +253,7 @@ export function SearchOverlay({
               key={listing.id}
               type="button"
               onClick={() => {
-                onSelectListing(listing.id);
+                onSelectListing(listing);
                 onClose();
               }}
               className="flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-left hover:bg-white/10"

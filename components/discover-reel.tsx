@@ -7,15 +7,26 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, ChevronUp, PackageOpen, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { REEL_GESTURE } from "@/lib/constants";
+import { createClient } from "@/lib/supabase/client";
+import { getOwnersByListingOwnerId } from "@/lib/listings";
+import { findActiveSwapRequestsForListings } from "@/lib/swap-requests";
+import { useDiscoverFeed } from "@/hooks/use-discover-feed";
+import { useFeedTracker } from "@/hooks/use-feed-tracker";
+import { recordPass, setPassReason, undoPass } from "@/lib/feed/passes";
+import { isPersistedListingId } from "@/lib/feed/ids";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { SwapRequestDialog } from "@/components/swap-request-dialog";
 import { ReelCard } from "@/components/reel-card";
+import { PassToast } from "@/components/pass-toast";
 import { StreakXpBar } from "@/components/gamification/streak-xp-bar";
 import { SearchOverlay } from "@/components/search-overlay";
-import type { GamificationProfile, Listing, Profile } from "@/types";
+import type { FeedOwner, GamificationProfile, Listing, PassReason, Profile } from "@/types";
 
 interface DiscoverReelProps {
+  /** The server-rendered first page — see app/discover/page.tsx, which
+   * builds this via lib/feed/queries.ts. Later pages load in the
+   * background as the viewer nears the end (see useDiscoverFeed). */
   listings: Listing[];
   owners: Record<string, Pick<Profile, "username" | "fullName" | "avatarUrl">>;
   currentUserId: string | null;
@@ -27,6 +38,8 @@ interface DiscoverReelProps {
    * user already sent for it, so a repeat swipe-right jumps straight to
    * that request instead of re-opening the offer builder. */
   activeSwapRequestByListingId: Record<string, string>;
+  /** True if the server has more pages beyond this first one. */
+  initialHasMore: boolean;
   /** null when logged out, or if the profile hasn't been provisioned yet —
    * StreakXpBar degrades gracefully to just the position pill either way. */
   gamification: GamificationProfile | null;
@@ -39,14 +52,16 @@ interface DiscoverReelProps {
 // conventionally means, matching how reels/feeds already work elsewhere):
 //   - Touch/pointer drag: swiping UP advances to the next card (this is
 //     direct-manipulation physics — the card stays glued to the finger —
-//     and matches every reel-style app, e.g. TikTok/Reels/Shorts).
+//     and matches every reel-style app, e.g. TikTok/Reels/Shorts). Swiping
+//     RIGHT opens the swap flow; swiping LEFT dismisses the card as "not
+//     interested" (mirrors Tinder-style swipe-to-pass).
 //   - Mouse wheel / trackpad: scrolling DOWN advances (the same convention
 //     as scrolling down any normal feed).
-//   - Keyboard: ArrowDown advances, ArrowUp goes back.
-// All three land on the same outcome ("the down-ish gesture moves you
-// forward"), they just start from different raw deltas. If this ever feels
-// backwards on a real device, the only lines that encode direction are the
-// `crossedNext`/`crossedPrev` checks below and the wheel handler.
+//   - Keyboard: ArrowDown advances, ArrowUp goes back, ArrowRight/Enter
+//     opens the swap flow.
+// If this ever feels backwards on a real device, the only lines that
+// encode direction are the `crossedNext`/`crossedPrev`/`crossedLeft`/
+// `crossedRight` checks below and the wheel handler.
 const {
   verticalThreshold,
   horizontalThreshold,
@@ -61,16 +76,29 @@ type InfoDialogState =
   | { type: "unavailable"; listing: Listing }
   | { type: "no-inventory"; listing: Listing };
 
+/** State backing the "not interested" confirmation toast, from the moment
+ * a card is dismissed until it's undone or the toast times out. */
+interface PassState {
+  listing: Listing;
+  /** Where the card sat before removal, so Undo can put it back there. */
+  atIndex: number;
+  /** True once the server rejected the pass and the card was restored. */
+  failed: boolean;
+  reason: PassReason | null;
+}
+
 export function DiscoverReel({
-  listings,
-  owners,
+  listings: initialListings,
+  owners: initialOwners,
   currentUserId,
   myListings,
   initialWishlistedListingIds,
-  activeSwapRequestByListingId,
+  activeSwapRequestByListingId: initialActiveSwapRequestByListingId,
+  initialHasMore,
   gamification,
 }: DiscoverReelProps) {
   const router = useRouter();
+  const supabase = useMemo(() => createClient(), []);
   const containerRef = useRef<HTMLDivElement>(null);
   const sizeRef = useRef({ width: 0, height: 0 });
   const pointerRef = useRef<{
@@ -87,13 +115,29 @@ export function DiscoverReel({
   const [isSettling, setIsSettling] = useState(false);
   const [swapListing, setSwapListing] = useState<Listing | null>(null);
   const [infoDialog, setInfoDialog] = useState<InfoDialogState | null>(null);
+  const [passState, setPassState] = useState<PassState | null>(null);
   const [reducedMotion, setReducedMotion] = useState(false);
-  // Re-entrancy guard for goTo, kept as a ref rather than state: it never
-  // drives any rendered output, and a ref stays correct instantly across
-  // every input handler's closure without forcing goTo to change identity
-  // mid-transition (which would tear down/rebuild the wheel + keyboard
-  // listeners while a transition was still in flight).
+  // Re-entrancy guard for goTo/commitPass, kept as a ref rather than state:
+  // it never drives any rendered output, and a ref stays correct instantly
+  // across every input handler's closure without forcing either callback
+  // to change identity mid-transition (which would tear down/rebuild the
+  // wheel + keyboard listeners while a transition was still in flight).
   const isAnimatingRef = useRef(false);
+
+  const feed = useDiscoverFeed({
+    initialListings,
+    initialOwners,
+    initialActiveSwapRequestByListingId,
+    initialHasMore,
+    currentIndex: index,
+  });
+  const { listings, owners, activeSwapRequestByListingId } = feed;
+
+  const tracker = useFeedTracker({
+    enabled: Boolean(currentUserId),
+    activeListingId: listings[index]?.id ?? null,
+    activePosition: index,
+  });
 
   const wishlistedIds = useMemo(
     () => new Set(initialWishlistedListingIds),
@@ -102,7 +146,8 @@ export function DiscoverReel({
   const anyDialogOpen = Boolean(swapListing || infoDialog);
 
   // Measure the viewport so a page transition can animate a card exactly
-  // one screen-height off before the next one settles into place.
+  // one screen-height (or width, for a pass) off before the next one
+  // settles into place.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -185,6 +230,7 @@ export function DiscoverReel({
       }
       const activeRequestId = activeSwapRequestByListingId[listing.id];
       if (activeRequestId) {
+        tracker.track("swap_started", listing.id);
         router.push(`/swaps/${activeRequestId}`);
         return;
       }
@@ -192,13 +238,128 @@ export function DiscoverReel({
         setInfoDialog({ type: "no-inventory", listing });
         return;
       }
+      tracker.track("swap_started", listing.id);
       setSwapListing(listing);
     },
-    [currentUserId, activeSwapRequestByListingId, myListings.length, router],
+    [currentUserId, activeSwapRequestByListingId, myListings.length, router, tracker],
   );
 
-  // Keyboard: ArrowUp/ArrowDown page, ArrowRight/Enter open the swap flow
-  // (mirrors the swipe gestures for anyone not using touch or a mouse).
+  /** Dismisses `listing` as "not interested": records the pass (optimistic,
+   * rolled back on failure), removes the card, and shows the undo toast.
+   * Shared by the pass button and a committed left-swipe. */
+  const performPass = useCallback(
+    (listing: Listing) => {
+      const result = feed.removeListing(listing.id);
+      if (!result) return;
+      const { index: removedIndex, remaining } = result;
+
+      tracker.track("pass", listing.id);
+      // The removed card was always the active one, so its slot is now
+      // occupied by whatever came after it — advancing "for free". Only
+      // clamp if that was the last card and nothing follows it.
+      setIndex((prev) => (prev >= remaining ? Math.max(0, remaining - 1) : prev));
+      setPassState({ listing, atIndex: removedIndex, failed: false, reason: null });
+
+      if (currentUserId && isPersistedListingId(listing.id)) {
+        recordPass(supabase, currentUserId, listing.id).catch((error) => {
+          console.error("Could not save pass; restoring the card.", error);
+          feed.restoreListing(listing, removedIndex);
+          setIndex(removedIndex);
+          setPassState({ listing, atIndex: removedIndex, failed: true, reason: null });
+        });
+      }
+    },
+    [feed, tracker, currentUserId, supabase],
+  );
+
+  /** Animates the active card off to the left, then hands off to
+   * performPass once it's clear of the screen. */
+  const commitPass = useCallback(
+    (listing: Listing) => {
+      if (isAnimatingRef.current) return;
+      isAnimatingRef.current = true;
+      const flyDistance = (sizeRef.current.width || 400) * 1.3;
+      setIsSettling(!reducedMotion);
+      setDrag({ x: -flyDistance, y: 0 });
+
+      window.setTimeout(
+        () => {
+          performPass(listing);
+          setIsSettling(false);
+          setDrag({ x: 0, y: 0 });
+          setAxis(null);
+          isAnimatingRef.current = false;
+        },
+        reducedMotion ? 0 : settleMs,
+      );
+    },
+    [performPass, reducedMotion],
+  );
+
+  const handleUndoPass = useCallback(() => {
+    if (!passState) return;
+    const { listing, atIndex } = passState;
+    const restoredIndex = feed.restoreListing(listing, atIndex);
+    setIndex(restoredIndex);
+    setPassState(null);
+
+    if (currentUserId && isPersistedListingId(listing.id)) {
+      // Fire-and-forget: if this fails, the pass row lingers server-side
+      // and the listing could reappear as passed on a future fresh load.
+      // Not ideal, but not worth blocking the undo's immediacy over.
+      undoPass(supabase, currentUserId, listing.id).catch((error) => {
+        console.error("Could not undo pass on the server.", error);
+      });
+    }
+  }, [passState, feed, currentUserId, supabase]);
+
+  const handlePassReason = useCallback(
+    (reason: PassReason) => {
+      if (!passState || !currentUserId) return;
+      const { listing } = passState;
+      setPassState((prev) => (prev ? { ...prev, reason } : prev));
+      if (isPersistedListingId(listing.id)) {
+        setPassReason(supabase, currentUserId, listing.id, reason).catch((error) => {
+          console.error("Could not save pass reason.", error);
+        });
+      }
+    },
+    [passState, currentUserId, supabase],
+  );
+
+  /** A listing picked from search that isn't already loaded: fetches its
+   * owner + any existing swap request, then splices it into the feed right
+   * after the current card. Already-loaded results just jump the index. */
+  const revealSearchResult = useCallback(
+    async (listing: Listing) => {
+      const existing = feed.indexOfListing(listing.id);
+      if (existing !== -1) {
+        setIndex(existing);
+        return;
+      }
+
+      let owner: FeedOwner | null = null;
+      let activeSwapRequestId: string | null = null;
+      if (isPersistedListingId(listing.id)) {
+        const [ownersById, activeById] = await Promise.all([
+          getOwnersByListingOwnerId(supabase, [listing]),
+          currentUserId
+            ? findActiveSwapRequestsForListings(supabase, [listing.id], currentUserId)
+            : Promise.resolve(new Map<string, string>()),
+        ]);
+        owner = ownersById[listing.ownerId] ?? null;
+        activeSwapRequestId = activeById.get(listing.id) ?? null;
+      }
+
+      const at = feed.revealListing(listing, { owner, activeSwapRequestId }, index);
+      setIndex(at);
+    },
+    [feed, index, supabase, currentUserId],
+  );
+
+  // Keyboard: ArrowUp/ArrowDown page, ArrowRight/Enter open the swap flow,
+  // Backspace/Delete passes (mirrors the swipe gestures for anyone not
+  // using touch or a mouse).
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (anyDialogOpen || listings.length === 0) return;
@@ -218,11 +379,15 @@ export function DiscoverReel({
       } else if (e.key === "ArrowRight" || e.key === "Enter") {
         e.preventDefault();
         triggerSwapFlow(listings[index]);
+      } else if (e.key === "Backspace" || e.key === "Delete") {
+        e.preventDefault();
+        const listing = listings[index];
+        if (listing) commitPass(listing);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [anyDialogOpen, goTo, triggerSwapFlow, listings, index]);
+  }, [anyDialogOpen, goTo, triggerSwapFlow, commitPass, listings, index]);
 
   // Wheel/trackpad paging. Attached manually (not via onWheel) so
   // preventDefault reliably stops the underlying page from scrolling.
@@ -290,10 +455,21 @@ export function DiscoverReel({
       const crossedRight =
         dx > horizontalThreshold ||
         (dx > axisLockThreshold && velocity > flickVelocity);
-      // Left has no assigned behavior yet — still detected (the drag
-      // itself is visible via the live transform), just a no-op
-      // spring-back on release. Wire a real action in here (e.g. a
-      // "pass"/hide) once that's decided.
+      const crossedLeft =
+        !crossedRight &&
+        (dx < -horizontalThreshold ||
+          (dx < -axisLockThreshold && velocity < -flickVelocity));
+
+      if (crossedLeft) {
+        setAxis(null);
+        const listing = listings[index];
+        if (listing) {
+          commitPass(listing);
+        } else {
+          setDrag({ x: 0, y: 0 });
+        }
+        return;
+      }
 
       if (crossedRight) {
         triggerSwapFlow(listings[index]);
@@ -357,8 +533,9 @@ export function DiscoverReel({
             No listings to swipe through yet
           </p>
           <p className="max-w-xs text-sm text-white/60">
-            Check back soon, or be the first to list something for others to
-            find.
+            {passState
+              ? "You've gone through everything for now — check back soon, or undo your last pass above."
+              : "Check back soon, or be the first to list something for others to find."}
           </p>
           <Link href="/listings/new">
             <Button variant="secondary" size="sm" className="mt-2">
@@ -398,6 +575,8 @@ export function DiscoverReel({
                   currentUserId={currentUserId}
                   wishlisted={wishlistedIds.has(listing.id)}
                   onOpenSwapFlow={() => triggerSwapFlow(listing)}
+                  onPass={() => commitPass(listing)}
+                  onInfoClick={() => tracker.track("info_open", listing.id)}
                 />
               </div>
             );
@@ -416,6 +595,7 @@ export function DiscoverReel({
             gamification={gamification}
             index={index}
             total={listings.length}
+            hasMore={feed.hasMore}
           />
 
           <div className="absolute right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-3">
@@ -431,7 +611,7 @@ export function DiscoverReel({
             <button
               type="button"
               onClick={() => goTo(1)}
-              disabled={index === listings.length - 1}
+              disabled={index === listings.length - 1 && !feed.hasMore}
               aria-label="Next listing"
               className="flex h-9 w-9 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur transition-opacity hover:bg-black/60 disabled:opacity-30"
             >
@@ -439,6 +619,19 @@ export function DiscoverReel({
             </button>
           </div>
         </>
+      )}
+
+      {passState && (
+        <PassToast
+          key={passState.listing.id}
+          listingTitle={passState.listing.title}
+          failed={passState.failed}
+          canGiveReason={Boolean(currentUserId) && isPersistedListingId(passState.listing.id)}
+          reason={passState.reason}
+          onUndo={handleUndoPass}
+          onReason={handlePassReason}
+          onDismiss={() => setPassState(null)}
+        />
       )}
 
       {swapListing && currentUserId && (
@@ -502,11 +695,9 @@ export function DiscoverReel({
       <SearchOverlay
         open={searchOpen}
         onClose={() => setSearchOpen(false)}
-        listings={listings}
         currentUserId={currentUserId}
-        onSelectListing={(listingId) => {
-          const found = listings.findIndex((l) => l.id === listingId);
-          if (found !== -1) setIndex(found);
+        onSelectListing={(listing) => {
+          void revealSearchResult(listing);
         }}
       />
     </div>

@@ -153,3 +153,12 @@ export interface WishlistEntry {
 // domain from the core swap flow — re-exported here so existing
 // `import type { X } from "@/types"` call sites don't need to change.
 export * from "./gamification";
+
+// --- Appended for the Discover feed feedback loop --------------------------
+// Kept in a separate module (types/feed.ts) since it's a distinct domain
+// from the core swap flow — re-exported here so existing
+// `import type { X } from "@/types"` call sites don't need to change.
+// types/feed.ts imports Listing/Profile back from here as `import type`,
+// which TypeScript erases at compile time, so this doesn't create a
+// runtime circular dependency.
+export * from "./feed";

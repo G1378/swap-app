@@ -10,7 +10,12 @@ interface StreakXpBarProps {
    * in DiscoverReel — folded in here so the reel's top edge has one
    * overlay, not two competing for the same corner). */
   index: number;
+  /** How many cards are loaded. The feed is paged, so this is a floor, not
+   * the catalogue size — see `hasMore`. */
   total: number;
+  /** True while more pages can still load, so the pill reads "3 / 20+"
+   * instead of implying 20 is the end. */
+  hasMore?: boolean;
 }
 
 /**
@@ -24,13 +29,14 @@ interface StreakXpBarProps {
  * Renders nothing beyond the position pill for logged-out visitors — the
  * gamification layer only exists once someone has an account.
  */
-export function StreakXpBar({ gamification, index, total }: StreakXpBarProps) {
+export function StreakXpBar({ gamification, index, total, hasMore = false }: StreakXpBarProps) {
   const progress = gamification ? getLevelProgress(gamification.xp) : null;
 
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-3 bg-gradient-to-b from-black/60 to-transparent p-4">
       <span className="pointer-events-auto shrink-0 rounded-full bg-black/40 px-3 py-1 text-xs font-medium text-white backdrop-blur">
         {index + 1} / {total}
+        {hasMore ? "+" : ""}
       </span>
 
       {gamification && progress && (
