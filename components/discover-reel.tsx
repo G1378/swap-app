@@ -21,13 +21,15 @@ import { ReelCard } from "@/components/reel-card";
 import { PassToast } from "@/components/pass-toast";
 import { StreakXpBar } from "@/components/gamification/streak-xp-bar";
 import { SearchOverlay } from "@/components/search-overlay";
-import type { FeedOwner, GamificationProfile, Listing, PassReason, Profile } from "@/types";
+import type { DiscoverListing, FeedOwner, GamificationProfile, Listing, PassReason, Profile } from "@/types";
 
 interface DiscoverReelProps {
   /** The server-rendered first page — see app/discover/page.tsx, which
    * builds this via lib/feed/queries.ts. Later pages load in the
-   * background as the viewer nears the end (see useDiscoverFeed). */
-  listings: Listing[];
+   * background as the viewer nears the end (see useDiscoverFeed). Each
+   * listing carries the ranking scores get_discover_feed computed for it
+   * (see types/feed.ts) — that's what powers each card's match badges. */
+  listings: DiscoverListing[];
   owners: Record<string, Pick<Profile, "username" | "fullName" | "avatarUrl">>;
   currentUserId: string | null;
   /** The signed-in user's own available listings — the inventory offered
@@ -79,7 +81,7 @@ type InfoDialogState =
 /** State backing the "not interested" confirmation toast, from the moment
  * a card is dismissed until it's undone or the toast times out. */
 interface PassState {
-  listing: Listing;
+  listing: DiscoverListing;
   /** Where the card sat before removal, so Undo can put it back there. */
   atIndex: number;
   /** True once the server rejected the pass and the card was restored. */
@@ -248,7 +250,7 @@ export function DiscoverReel({
    * rolled back on failure), removes the card, and shows the undo toast.
    * Shared by the pass button and a committed left-swipe. */
   const performPass = useCallback(
-    (listing: Listing) => {
+    (listing: DiscoverListing) => {
       const result = feed.removeListing(listing.id);
       if (!result) return;
       const { index: removedIndex, remaining } = result;
@@ -275,7 +277,7 @@ export function DiscoverReel({
   /** Animates the active card off to the left, then hands off to
    * performPass once it's clear of the screen. */
   const commitPass = useCallback(
-    (listing: Listing) => {
+    (listing: DiscoverListing) => {
       if (isAnimatingRef.current) return;
       isAnimatingRef.current = true;
       const flyDistance = (sizeRef.current.width || 400) * 1.3;

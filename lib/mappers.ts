@@ -2,6 +2,7 @@ import type {
   AppNotification,
   Badge,
   Conversation,
+  DiscoverListing,
   GamificationProfile,
   Listing,
   ListingPhoto,
@@ -191,5 +192,20 @@ export function mapUserQuestProgressWithQuestRow(row: Row): UserQuestProgressWit
     completedAt: row.completed_at ?? null,
     createdAt: row.created_at,
     quest: mapQuestRow(row.quest),
+  };
+}
+
+// --- Appended for the Discover feed feedback loop --------------------------
+
+/** Expects a row from `get_discover_feed` (see
+ * prisma/migrations_manual/0015) — a listing's own columns plus the three
+ * ranking signals the function computes. Not for plain `listings` rows
+ * from anywhere else; use `mapListingRow` for those. */
+export function mapDiscoverListingRow(row: Row): DiscoverListing {
+  return {
+    ...mapListingRow(row),
+    ownerWishlistedMine: Boolean(row.owner_wishlisted_mine),
+    wantScore: row.want_score ?? 0,
+    acceptScore: row.accept_score ?? 0,
   };
 }

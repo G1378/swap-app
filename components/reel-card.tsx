@@ -2,15 +2,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Info, Package, Repeat2, X } from "lucide-react";
+import { Handshake, Info, Package, Repeat2, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { WishlistButton } from "@/components/wishlist-button";
 import { REEL_GESTURE } from "@/lib/constants";
-import type { Listing, Profile } from "@/types";
+import { MATCH_SCORE_THRESHOLD } from "@/lib/feed/constants";
+import type { DiscoverListing, Profile } from "@/types";
 
 interface ReelCardProps {
-  listing: Listing;
+  listing: DiscoverListing;
   owner: Pick<Profile, "username" | "fullName" | "avatarUrl"> | null;
   /** True only for the centered/current card — prev/next staging cards
    * render statically and never receive drag or a swipe-hint. */
@@ -53,6 +54,8 @@ export function ReelCard({
   const rightProgress = isActive ? clamp01(dragX / REEL_GESTURE.horizontalThreshold) : 0;
   const leftProgress = isActive ? clamp01(-dragX / REEL_GESTURE.horizontalThreshold) : 0;
   const ownerName = owner ? owner.fullName || owner.username : null;
+  const isGoodSwapOdds = listing.acceptScore >= MATCH_SCORE_THRESHOLD;
+  const isWantMatch = listing.wantScore >= MATCH_SCORE_THRESHOLD;
 
   return (
     <div
@@ -106,8 +109,26 @@ export function ReelCard({
         </>
       )}
 
-      <div className="absolute left-4 top-4">
+      <div className="absolute left-4 top-4 flex flex-wrap items-center gap-1.5 pr-20">
         <Badge>{listing.category}</Badge>
+        {/* Match badges come from get_discover_feed's text-matching scores
+           (see prisma/migrations_manual/0015) — lexical, not semantic, so
+           they catch close title matches, not synonyms. Both can show at
+           once; accept (they'd likely take one of your items) matters more
+           than want (this looks like something you're after), so it's
+           listed first. */}
+        {isGoodSwapOdds && (
+          <span className="flex items-center gap-1 rounded-full bg-emerald-500/90 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur">
+            <Handshake className="h-3 w-3" />
+            Good swap odds
+          </span>
+        )}
+        {isWantMatch && (
+          <span className="flex items-center gap-1 rounded-full bg-primary/90 px-2.5 py-1 text-xs font-semibold text-primary-foreground backdrop-blur">
+            <Sparkles className="h-3 w-3" />
+            Matches what you want
+          </span>
+        )}
       </div>
 
       {/* Right action rail */}

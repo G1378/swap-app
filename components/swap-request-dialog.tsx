@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createSwapRequest } from "@/lib/swap-requests";
+import { bestMatchingListingId } from "@/lib/feed/text-similarity";
 import { Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -24,11 +25,29 @@ interface SwapRequestDialogProps {
   myPointsBalance?: number;
 }
 
+/** Whichever of the user's own listings best matches what `listing`'s
+ * owner said they want, falling back to the first listing (the prior
+ * behaviour) if nothing clears the match threshold or there's nothing to
+ * compare against. Computed once, not live — see the note on `useState`
+ * below for why that's the right call here. */
+function initialSelection(listing: Listing, myListings: Listing[]): string[] {
+  const bestId = bestMatchingListingId(listing.wantedInReturn, myListings);
+  const fallbackId = myListings[0]?.id;
+  const id = bestId ?? fallbackId;
+  return id ? [id] : [];
+}
+
 export function SwapRequestDialog({ open, onClose, listing, myListings, myPointsBalance }: SwapRequestDialogProps) {
   const router = useRouter();
   const supabase = createClient();
 
-  const [selectedIds, setSelectedIds] = useState<string[]>(myListings[0] ? [myListings[0].id] : []);
+  // A lazy useState initializer, not useMemo: this only needs to run once,
+  // the first time this dialog appears for this `listing`. Both call sites
+  // already guarantee that — components/discover-reel.tsx only mounts this
+  // dialog while a listing is selected (unmounting/remounting it fresh
+  // each time), and components/listing-swap-action.tsx renders one dialog
+  // per fixed listing for the page's lifetime.
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => initialSelection(listing, myListings));
   const [offeredPoints, setOfferedPoints] = useState(0);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);

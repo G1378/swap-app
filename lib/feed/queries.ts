@@ -1,11 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getBlockedEitherDirection } from "@/lib/blocks";
 import { getAvailableListings, getOwnersByListingOwnerId } from "@/lib/listings";
-import { mapListingRow } from "@/lib/mappers";
+import { mapDiscoverListingRow } from "@/lib/mappers";
 import { findActiveSwapRequestsForListings } from "@/lib/swap-requests";
 import { FEED_MAX_EXCLUDE_IDS, FEED_PAGE_SIZE } from "@/lib/feed/constants";
 import { isPersistedListingId } from "@/lib/feed/ids";
-import type { DiscoverFeedPage, Listing } from "@/types";
+import type { DiscoverFeedPage, DiscoverListing, Listing } from "@/types";
 
 export interface DiscoverFeedOptions {
   /** Cards to return. Defaults to FEED_PAGE_SIZE. */
@@ -17,8 +17,16 @@ export interface DiscoverFeedOptions {
 }
 
 interface RawFeed {
-  listings: Listing[];
+  listings: DiscoverListing[];
   hasMore: boolean;
+}
+
+/** A plain Listing (from the fallback path, which just queries `listings`
+ * directly) carries none of get_discover_feed's ranking signals — filled
+ * in as zero/false rather than left undefined, so every DiscoverListing in
+ * the app always has real numbers to compare against MATCH_SCORE_THRESHOLD. */
+function toUnscoredDiscoverListing(listing: Listing): DiscoverListing {
+  return { ...listing, ownerWishlistedMine: false, wantScore: 0, acceptScore: 0 };
 }
 
 /**
@@ -27,10 +35,12 @@ interface RawFeed {
  * card needs. Used by the /discover page for the first page and by
  * POST /api/discover/feed for every page after.
  *
- * Filtering and ordering live in the `get_discover_feed` database function
- * (prisma/migrations_manual/0014): it hides the viewer's own listings,
- * blocked users, and anything they've passed on, and puts owners who saved
- * one of the viewer's items first.
+ * Filtering, text matching and ordering all live in the `get_discover_feed`
+ * database function (prisma/migrations_manual/0014, extended by 0015): it
+ * hides the viewer's own listings, blocked users, and anything they've
+ * passed on; puts owners who saved one of the viewer's items first; and
+ * otherwise orders by how well each candidate matches what the viewer's
+ * own listings say they want, in both directions.
  */
 export async function getDiscoverFeedPage(
   supabase: SupabaseClient,
@@ -78,8 +88,9 @@ async function fetchFeedListings(
   });
 
   if (error) {
-    // Most likely migration 0014 hasn't been applied yet. Keep Discover
-    // working (unranked, no pass filtering) rather than showing nothing.
+    // Most likely migration 0014 and/or 0015 hasn't been applied yet. Keep
+    // Discover working (unranked, no pass filtering, no match scores)
+    // rather than showing nothing.
     console.error(
       "get_discover_feed failed; falling back to the unranked listing query.",
       error.message,
@@ -99,7 +110,7 @@ async function fetchFeedListings(
   }
 
   return {
-    listings: rows.slice(0, limit).map(mapListingRow),
+    listings: rows.slice(0, limit).map(mapDiscoverListingRow),
     hasMore: rows.length > limit,
   };
 }
@@ -116,7 +127,9 @@ async function hasAnyAvailableListing(supabase: SupabaseClient): Promise<boolean
 }
 
 /** The pre-0014 behaviour: everything available, newest first, minus the
- * viewer's own listings and blocked users. Returned as a single page. */
+ * viewer's own listings and blocked users. Returned as a single page,
+ * with every listing's ranking signals zeroed out — see
+ * toUnscoredDiscoverListing. */
 async function unrankedFallback(
   supabase: SupabaseClient,
   viewerId: string | null,
@@ -129,5 +142,8 @@ async function unrankedFallback(
 
   const all = await getAvailableListings(supabase, { excludeOwnerIds });
   const skip = new Set(excludeIds);
-  return { listings: all.filter((l) => !skip.has(l.id)), hasMore: false };
+  return {
+    listings: all.filter((l) => !skip.has(l.id)).map(toUnscoredDiscoverListing),
+    hasMore: false,
+  };
 }

@@ -32,6 +32,19 @@ export const PASS_TOAST_MS = 7000;
 /** How long the "Thanks" confirmation stays after choosing a reason. */
 export const PASS_TOAST_THANKS_MS = 1500;
 
+/**
+ * Minimum pg_trgm-style similarity score (0–1) to count as a meaningful
+ * text match — used both for the "match" badges on Discover cards
+ * (against DiscoverListing.wantScore / .acceptScore, computed in
+ * get_discover_feed — see prisma/migrations_manual/0015) and for picking
+ * a best-fit item in the swap offer builder (against the in-browser
+ * lib/feed/text-similarity.ts, a from-scratch reimplementation of the
+ * same idea for small in-memory comparisons). Matches pg_trgm's own
+ * default `similarity_threshold` GUC, so a "match" here means the same
+ * thing a Postgres `%` search would call a match.
+ */
+export const MATCH_SCORE_THRESHOLD = 0.3;
+
 export const FEED_EVENT_TUNING = {
   /** ms between background flushes of the event buffer */
   flushIntervalMs: 5000,
