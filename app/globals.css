@@ -2,57 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-
-    /* Brand — coral. This is the one color every user *action* uses:
-     * primary buttons, the swap CTA, active nav state, wishlist. Keeping
-     * it to a single hue (rather than cycling colors per feature) is a
-     * deliberate restraint call — see docs/DESIGN.md. */
-    --primary: 15 68% 52%;
-    --primary-foreground: 0 0% 100%;
-
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-
-    /* Neutral on purpose (not a brand tint) — this drives hover/pressed
-     * states across every ghost button, menu item, and badge, so keeping
-     * it gray stops coral from bleeding into places it shouldn't. */
-    --accent: 210 20% 95%;
-    --accent-foreground: 222 47% 11%;
-
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 100%;
-
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 15 68% 52%;
-
-    /* Reward — amber. Reserved exclusively for the gamification layer
-     * (streak, XP, quests) so it reads as a distinct "game" system next
-     * to coral's "action" system, never as a second brand color. */
-    --reward: 35 78% 41%;
-    --reward-foreground: 0 0% 100%;
-    --reward-soft: 39 76% 92%;
-    --reward-soft-foreground: 32 89% 21%;
-
-    --radius: 0.75rem;
-  }
+:root {
+  --color-ink: #14231f;
+  --color-ink-soft: #55645c;
+  --color-paper: #f3f5f2;
+  --color-surface: #ffffff;
+  --color-surface-muted: #eef1ed;
+  --color-line: #dee3dc;
+  --color-primary: #2b6f53;
+  --color-primary-dark: #1e4f3b;
+  --color-primary-soft: #e4f0ea;
+  --color-accent: #c98a2b;
+  --color-accent-soft: #f6ead1;
+  --color-danger: #b3413a;
 }
 
-@layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
+* {
+  border-color: var(--color-line);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-paper);
+  color: var(--color-ink);
+}
+
+::selection {
+  background-color: var(--color-primary-soft);
+  color: var(--color-primary-dark);
+}
+
+/* Visible keyboard focus everywhere, no focus rings removed */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Hide scrollbar for the horizontal chip rails while keeping it scrollable */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
   }
 }

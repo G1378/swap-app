@@ -2,55 +2,57 @@ import type { Config } from "tailwindcss";
 
 const config: Config = {
   darkMode: "class",
-  content: ["./app/**/*.{ts,tsx}", "./components/**/*.{ts,tsx}"],
+  content: [
+    "./app/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+  ],
   theme: {
-    container: {
-      center: true,
-      padding: "1rem",
-      screens: { "2xl": "1280px" },
-    },
     extend: {
       colors: {
-        border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
-        background: "hsl(var(--background))",
-        foreground: "hsl(var(--foreground))",
+        ink: "var(--color-ink)",
+        "ink-soft": "var(--color-ink-soft)",
+        paper: "var(--color-paper)",
+        surface: "var(--color-surface)",
+        "surface-muted": "var(--color-surface-muted)",
+        line: "var(--color-line)",
         primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
+          DEFAULT: "var(--color-primary)",
+          dark: "var(--color-primary-dark)",
+          soft: "var(--color-primary-soft)",
         },
         accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
+          DEFAULT: "var(--color-accent)",
+          soft: "var(--color-accent-soft)",
         },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        reward: {
-          DEFAULT: "hsl(var(--reward))",
-          foreground: "hsl(var(--reward-foreground))",
-          soft: "hsl(var(--reward-soft))",
-          "soft-foreground": "hsl(var(--reward-soft-foreground))",
-        },
+        danger: "var(--color-danger)",
+      },
+      fontFamily: {
+        sans: ["var(--font-jakarta)", "system-ui", "sans-serif"],
       },
       borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        sheet: "1.25rem",
+      },
+      boxShadow: {
+        panel: "0 12px 32px -16px rgba(20, 35, 31, 0.28)",
+      },
+      keyframes: {
+        "slide-up": {
+          from: { transform: "translateY(100%)" },
+          to: { transform: "translateY(0)" },
+        },
+        "slide-in": {
+          from: { transform: "translateX(100%)" },
+          to: { transform: "translateX(0)" },
+        },
+        "fade-in": {
+          from: { opacity: "0" },
+          to: { opacity: "1" },
+        },
+      },
+      animation: {
+        "slide-up": "slide-up 0.28s cubic-bezier(0.32, 0.72, 0, 1)",
+        "slide-in": "slide-in 0.28s cubic-bezier(0.32, 0.72, 0, 1)",
+        "fade-in": "fade-in 0.2s ease-out",
       },
     },
   },

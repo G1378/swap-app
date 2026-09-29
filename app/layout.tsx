@@ -1,12 +1,23 @@
-import type { Metadata } from "next";
-import { Navbar } from "@/components/navbar";
-import { Footer } from "@/components/footer";
+import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-jakarta",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "SwapApp — Trade what you have for what you want",
+  title: "swap-app \u2014 trade what you have for what you want",
   description:
-    "A modern marketplace for swapping unwanted items. List what you have, discover what you want, and let smart matching do the rest.",
+    "List items in minutes, get matched with people who have what you're after, and swap instead of buying and selling.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#f3f5f2",
 };
 
 export default function RootLayout({
@@ -15,12 +26,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="flex min-h-screen flex-col antialiased">
-        <Navbar />
-        <main className="flex-1 pb-16 sm:pb-0">{children}</main>
-        <Footer />
-      </body>
+    <html lang="en" className={jakarta.variable}>
+      <body className="font-sans antialiased min-h-dvh">{children}</body>
     </html>
   );
 }
